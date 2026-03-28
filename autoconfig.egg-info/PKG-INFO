@@ -1,7 +1,7 @@
 Metadata-Version: 2.4
 Name: autoconfig
-Version: 1.0.0
-Summary: Graph Query Execution Time Prediction
+Version: 2.0.0
+Summary: Graph Query Execution Time Prediction - Feature Extraction Tools
 Author: AutoConfig Team
 Requires-Python: >=3.8
 Requires-Dist: numpy>=1.21.0

@@ -1,0 +1,296 @@
+catalog_stats:
+  cpu_cores:
+    max: 64
+    mean: !!python/object/apply:numpy._core.multiarray.scalar
+    - &id001 !!python/object/apply:numpy.dtype
+      args:
+      - f8
+      - false
+      - true
+      state: !!python/tuple
+      - 3
+      - <
+      - null
+      - null
+      - null
+      - -1
+      - -1
+      - 0
+    - !!binary |
+      6aKLLrroNEA=
+    min: 2
+    std: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      4SFbQylBMUA=
+  gpu_memory_gb:
+    max: 40
+    mean: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      o4suuuiiK0A=
+    min: 0
+    std: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      17VDl6EELUA=
+  gpu_sm_count:
+    max: 10240
+    mean: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      dNFFF110mUA=
+    min: 0
+    std: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      ti4WO1OHqEA=
+  memory_gb:
+    max: 256
+    mean: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      jC666KKLU0A=
+    min: 4
+    std: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      R2tmxF8oUkA=
+  num_gpus:
+    max: 8
+    mean: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      F1100UUX/T8=
+    min: 0
+    std: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      AiiFWLeKA0A=
+  storage_gb:
+    max: 2000
+    mean: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      F1100UUHhEA=
+    min: 50
+    std: !!python/object/apply:numpy._core.multiarray.scalar
+    - *id001
+    - !!binary |
+      amel174tgUA=
+config_features:
+- conf_k_instances: 8
+  conf_per_instance:
+    cpu_cores: 16
+    gpu_memory_gb: 16
+    gpu_sm_count: 0
+    memory_gb: 64
+    num_gpus: 1
+    storage_gb: 500
+  conf_resource_type: 0
+  conf_total_cpu_cores: 128
+  conf_total_gpus: 8
+  conf_total_memory_gb: 512
+  conf_total_storage_gb: 4000
+- conf_k_instances: 6
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 0
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 0
+    storage_gb: 1000
+  conf_resource_type: 1
+  conf_total_cpu_cores: 192
+  conf_total_gpus: 0
+  conf_total_memory_gb: 768
+  conf_total_storage_gb: 6000
+- conf_k_instances: 12
+  conf_per_instance:
+    cpu_cores: 64
+    gpu_memory_gb: 32
+    gpu_sm_count: 0
+    memory_gb: 256
+    num_gpus: 8
+    storage_gb: 2000
+  conf_resource_type: 2
+  conf_total_cpu_cores: 768
+  conf_total_gpus: 96
+  conf_total_memory_gb: 3072
+  conf_total_storage_gb: 24000
+- conf_k_instances: 7
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+  conf_resource_type: 3
+  conf_total_cpu_cores: 224
+  conf_total_gpus: 28
+  conf_total_memory_gb: 896
+  conf_total_storage_gb: 7000
+- conf_k_instances: 11
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+  conf_resource_type: 4
+  conf_total_cpu_cores: 352
+  conf_total_gpus: 44
+  conf_total_memory_gb: 1408
+  conf_total_storage_gb: 11000
+- conf_k_instances: 6
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+  conf_resource_type: 5
+  conf_total_cpu_cores: 192
+  conf_total_gpus: 24
+  conf_total_memory_gb: 768
+  conf_total_storage_gb: 6000
+- conf_k_instances: 9
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 0
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 0
+    storage_gb: 1000
+  conf_resource_type: 6
+  conf_total_cpu_cores: 288
+  conf_total_gpus: 0
+  conf_total_memory_gb: 1152
+  conf_total_storage_gb: 9000
+- conf_k_instances: 9
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+  conf_resource_type: 7
+  conf_total_cpu_cores: 288
+  conf_total_gpus: 36
+  conf_total_memory_gb: 1152
+  conf_total_storage_gb: 9000
+- conf_k_instances: 7
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 0
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 0
+    storage_gb: 1000
+  conf_resource_type: 8
+  conf_total_cpu_cores: 224
+  conf_total_gpus: 0
+  conf_total_memory_gb: 896
+  conf_total_storage_gb: 7000
+- conf_k_instances: 10
+  conf_per_instance:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    gpu_sm_count: 0
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+  conf_resource_type: 9
+  conf_total_cpu_cores: 320
+  conf_total_gpus: 40
+  conf_total_memory_gb: 1280
+  conf_total_storage_gb: 10000
+configurations:
+- config_id: 0
+  k: 8
+  resource:
+    cpu_cores: 16
+    gpu_memory_gb: 16
+    memory_gb: 64
+    num_gpus: 1
+    storage_gb: 500
+- config_id: 1
+  k: 6
+  resource:
+    cpu_cores: 32
+    memory_gb: 128
+    num_gpus: 0
+    storage_gb: 1000
+- config_id: 2
+  k: 12
+  resource:
+    cpu_cores: 64
+    gpu_memory_gb: 32
+    memory_gb: 256
+    num_gpus: 8
+    storage_gb: 2000
+- config_id: 3
+  k: 7
+  resource:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+- config_id: 4
+  k: 11
+  resource:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+- config_id: 5
+  k: 6
+  resource:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+- config_id: 6
+  k: 9
+  resource:
+    cpu_cores: 32
+    memory_gb: 128
+    num_gpus: 0
+    storage_gb: 1000
+- config_id: 7
+  k: 9
+  resource:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+- config_id: 8
+  k: 7
+  resource:
+    cpu_cores: 32
+    memory_gb: 128
+    num_gpus: 0
+    storage_gb: 1000
+- config_id: 9
+  k: 10
+  resource:
+    cpu_cores: 32
+    gpu_memory_gb: 16
+    memory_gb: 128
+    num_gpus: 4
+    storage_gb: 1000
+metadata:
+  catalog_size: 11
+  k_range:
+  - 1
+  - 16
+  num_samples: 10
+  sampling_method: latin_hypercube

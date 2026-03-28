@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autoconfig"
-version = "1.0.0"
-description = "Graph Query Execution Time Prediction"
+version = "2.0.0"
+description = "Graph Query Execution Time Prediction - Feature Extraction Tools"
 authors = [{name = "AutoConfig Team"}]
 requires-python = ">=3.8"
 dependencies = [
@@ -17,7 +17,8 @@ dependencies = [
 ]
 
 [project.scripts]
-autoconfig = "autoconfig.main:main"
+autoconfig = "autoconfig.cli:main"
+autoconfig-train = "autoconfig.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

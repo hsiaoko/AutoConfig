@@ -1,5 +1,7 @@
 """
 Main pipeline for training and prediction.
+
+Supports both code-based and graph-based query representation.
 """
 
 import numpy as np
@@ -10,35 +12,75 @@ import argparse
 from autoconfig import CostPredictor, BayesianExecutionTimeModel
 
 
+# Sample query code templates
+QUERY_TEMPLATES = {
+    'vertex_scan': """
+for v in G.vertices():
+    process(v)
+""",
+    'edge_scan': """
+for v in G.vertices():
+    for neighbor in G.neighbors(v):
+        process(v, neighbor)
+""",
+    'frontier': """
+worklist = [source]
+while !worklist.empty():
+    for v in worklist:
+        for neighbor in G.neighbors(v):
+            visit(neighbor)
+""",
+    'recursive': """
+def expand(node, depth):
+    if depth == 0: return
+    for neighbor in G.neighbors(node):
+        expand(neighbor, depth - 1)
+""",
+    'atomic': """
+for edge in G.edges():
+    atomicAdd(counter[edge.src], 1)
+""",
+    'complex': """
+for v in G.vertices():
+    if condition(v):
+        for neighbor in G.neighbors(v):
+            atomicAdd(rank[neighbor], 1)
+    barrier()
+""",
+}
+
+
 def generate_synthetic_data(
     n_samples: int = 100,
-    n_query_nodes_range: Tuple[int, int] = (3, 10),
     n_graph_nodes_range: Tuple[int, int] = (50, 200),
     edge_probability: float = 0.1
-) -> Tuple[List, List, List, np.ndarray]:
+) -> Tuple[List[str], List[nx.Graph], List[Dict], np.ndarray]:
     """
     Generate synthetic training data for demonstration.
     
+    Uses code-based query representation.
+    
     Args:
         n_samples: Number of samples to generate
-        n_query_nodes_range: Range of query graph sizes
         n_graph_nodes_range: Range of data graph sizes
         edge_probability: Probability of edge creation
         
     Returns:
-        Tuple of (queries, graphs, configs, execution_times)
+        Tuple of (query_codes, graphs, configs, execution_times)
     """
-    queries = []
+    query_codes = []
     graphs = []
     configs = []
     execution_times = []
     
     np.random.seed(42)
     
+    query_template_names = list(QUERY_TEMPLATES.keys())
+    
     for i in range(n_samples):
-        # Generate random query graph
-        n_query_nodes = np.random.randint(*n_query_nodes_range)
-        query = nx.erdos_renyi_graph(n_query_nodes, edge_probability * 2)
+        # Select random query template
+        template_name = np.random.choice(query_template_names)
+        query_code = QUERY_TEMPLATES[template_name]
         
         # Generate random data graph
         n_graph_nodes = np.random.randint(*n_graph_nodes_range)
@@ -58,25 +100,43 @@ def generate_synthetic_data(
             'compression_enabled': np.random.choice([True, False])
         }
         
-        # Generate synthetic execution time
-        # (in real scenario, this would be actual measured time)
-        base_time = (
-            n_query_nodes * 10 +
-            n_graph_nodes * 0.5 +
-            query.number_of_edges() * 5 +
-            graph.number_of_edges() * 0.1 +
-            (16 / config['num_threads']) * 100 +
-            (16384 / config['memory_limit']) * 50
+        # Generate synthetic execution time based on features
+        n_nodes = graph.number_of_nodes()
+        n_edges = graph.number_of_edges()
+        degrees = [d for _, d in graph.degree()]
+        max_degree = max(degrees) if degrees else 0
+        
+        # Base time from graph size
+        base_time = n_nodes * 0.5 + n_edges * 0.1
+        
+        # Add query complexity
+        complexity_bonus = {
+            'vertex_scan': 10,
+            'edge_scan': 50,
+            'frontier': 100,
+            'recursive': 200,
+            'atomic': 80,
+            'complex': 150,
+        }
+        base_time += complexity_bonus.get(template_name, 50)
+        
+        # Configuration effects
+        config_factor = (
+            (16 / config['num_threads']) * 20 +
+            (16384 / config['memory_limit']) * 10
         )
+        base_time += config_factor
+        
+        # Add noise
         noise = np.random.normal(0, base_time * 0.1)
         exec_time = max(1.0, base_time + noise)
         
-        queries.append(query)
+        query_codes.append(query_code)
         graphs.append(graph)
         configs.append(config)
         execution_times.append(exec_time)
     
-    return queries, graphs, configs, np.array(execution_times)
+    return query_codes, graphs, configs, np.array(execution_times)
 
 
 def train_pipeline(
@@ -155,12 +215,20 @@ def prediction_example(predictor: CostPredictor = None):
     # Create or load predictor
     if predictor is None:
         predictor = CostPredictor()
-        # For demonstration, use untrained model (predictions will be poor)
         print("Warning: Using untrained model for demonstration")
     
-    # Create a sample query
-    query = nx.Graph()
-    query.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3)])  # 4-node cycle
+    # Sample query code (BFS-like)
+    query_code = """
+    BFS(Graph G, source):
+        worklist = [source]
+        visited[source] = true
+        while !worklist.empty():
+            for v in worklist:
+                for neighbor in G.neighbors(v):
+                    if !visited[neighbor]:
+                        visited[neighbor] = true
+                        worklist.append(neighbor)
+    """
     
     # Create a sample data graph
     graph = nx.erdos_renyi_graph(100, 0.1)
@@ -181,14 +249,41 @@ def prediction_example(predictor: CostPredictor = None):
     
     # Predict
     pred, lower, upper = predictor.predict(
-        query, graph, config, return_uncertainty=True
+        query_code, graph, config, return_uncertainty=True
     )
     
     print("\nPrediction Example:")
-    print(f"  Query: {query.number_of_nodes()} nodes, {query.number_of_edges()} edges")
+    print(f"  Query: BFS (code-based)")
     print(f"  Data Graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
     print(f"  Predicted Execution Time: {pred:.2f} ms")
     print(f"  95% Confidence Interval: [{lower:.2f}, {upper:.2f}] ms")
+
+
+def feature_demo():
+    """Demonstrate feature extraction."""
+    from autoconfig import FeatureManager
+    
+    print("\n" + "=" * 60)
+    print("Feature Extraction Demo")
+    print("=" * 60)
+    
+    manager = FeatureManager()
+    
+    # Sample query
+    query_code = QUERY_TEMPLATES['edge_scan']
+    graph = nx.erdos_renyi_graph(50, 0.1)
+    config = {'memory_limit': 8192, 'num_threads': 4}
+    
+    features = manager.extract_all(query_code, graph, config)
+    dims = manager.get_feature_dimensions()
+    groups = manager.get_feature_groups()
+    
+    print(f"\nTotal features: {len(features)}")
+    print(f"Feature dimensions: {dims}")
+    
+    print("\nFeature groups:")
+    for group_name, names in groups.items():
+        print(f"  {group_name}: {len(names)} features")
 
 
 def main():
@@ -205,6 +300,11 @@ def main():
         '--predict',
         action='store_true',
         help='Run prediction example'
+    )
+    parser.add_argument(
+        '--features',
+        action='store_true',
+        help='Run feature extraction demo'
     )
     parser.add_argument(
         '--n-train',
@@ -227,6 +327,10 @@ def main():
     
     args = parser.parse_args()
     
+    if args.features:
+        feature_demo()
+        return
+    
     if args.train:
         predictor = train_pipeline(
             n_train_samples=args.n_train,
@@ -244,7 +348,7 @@ def main():
         prediction_example()
     
     else:
-        # Default: run both training and prediction
+        # Default: run training, evaluation, and prediction
         print("=" * 60)
         print("Graph Query Execution Time Prediction System")
         print("=" * 60)
@@ -259,6 +363,7 @@ def main():
             print(f"\nModel saved to {args.save_model}")
         
         prediction_example(predictor)
+        feature_demo()
 
 
 if __name__ == '__main__':

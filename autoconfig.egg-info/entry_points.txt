@@ -1,2 +1,3 @@
 [console_scripts]
-autoconfig = autoconfig.main:main
+autoconfig = autoconfig.cli:main
+autoconfig-train = autoconfig.main:main

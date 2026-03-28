@@ -73,29 +73,34 @@ class CostPredictor:
     
     def predict_batch(
         self,
-        queries: List[Union[nx.Graph, Dict[str, Any]]],
+        queries: List[Union[str, nx.Graph, Dict[str, Any]]],
         graphs: List[Union[nx.Graph, Dict[str, Any]]],
         configs: List[Dict[str, Any]],
         return_uncertainty: bool = False
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """
         Predict execution times for multiple query-graph-config combinations.
-        
+
         Args:
-            queries: List of query graphs
+            queries: List of query source code strings or query graphs
             graphs: List of data graphs
             configs: List of configurations
             return_uncertainty: Whether to return confidence intervals
-            
+
         Returns:
             Array of predictions or (predictions, lower_bounds, upper_bounds)
         """
         n_samples = len(queries)
-        
+
         # Extract all features
         features_list = []
         for i in range(n_samples):
-            if isinstance(queries[i], nx.Graph):
+            if isinstance(queries[i], str):
+                # Source code query
+                features = self.feature_manager.extract_all(
+                    queries[i], graphs[i], configs[i]
+                )
+            elif isinstance(queries[i], nx.Graph):
                 features = self.feature_manager.extract_all(
                     queries[i], graphs[i], configs[i]
                 )
@@ -104,9 +109,9 @@ class CostPredictor:
                     queries[i], graphs[i], configs[i]
                 )
             features_list.append(features)
-        
+
         features_matrix = np.vstack(features_list)
-        
+
         # Predict
         if return_uncertainty:
             pred, lower, upper = self.model.predict_with_uncertainty(features_matrix)

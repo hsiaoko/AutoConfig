@@ -1,59 +1,10 @@
 # AutoConfig - 图查询执行时间预测
 
-自动配置系统 - 基于机器学习的图查询执行时间预测
+基于机器学习的图查询执行时间预测系统
 
-## 项目概述
+## 快速开始
 
-本项目旨在为任意图查询给定查询 Q、数据图 G 以及系统配置 Conf，预测该图查询的执行时间。
-
-## 系统架构
-
-本任务分为三个子系统：
-
-### 1. 特征提取 (Feature Extraction)
-
-采用**三阶段特征提取方法**，支持任意 Hybrid 图查询程序：
-
-| 阶段 | 特征类型 | 特征数 | 来源 |
-|------|---------|--------|------|
-| **静态分析** | 代码结构特征 | 8 | 查询源代码 |
-| **符号匹配** | 工作负载模板 | 12 | 代码模式 + 图统计 |
-| **图感知实例化** | 图/分区统计 | 17 | 图 G + 分区 F |
-| **配置参数** | 系统配置 | 10 | 配置字典 |
-
-**静态特征**（8 个）：
-- 循环计数、最大循环深度
-- 分支计数、变量计数
-- 递归计数、原子操作计数
-- 同步计数、显式并行标志
-
-**符号特征**（6 个模板，12 个特征）：
-- **VScan**: 顶点扫描 (|V|)
-- **EScan**: 边扫描 (|E|)
-- **FScan**: 前沿迭代 (∑|E_t|)
-- **RExp**: 递归扩展 (∏deg)
-- **Atom**: 原子更新 (|E|×skew)
-- **Comm**: 跨分区通信 (∑deg_∂)
-
-### 2. 模型训练 (Model Training)
-
-训练贝叶斯浅层模型用于预测执行时间：
-
-- **贝叶斯岭回归**: 自动正则化参数调优
-- **不确定性估计**: 提供预测置信区间
-- **对数变换**: 处理偏态时间分布
-- **抗过拟合**: 适合小样本训练
-
-### 3. 预测阶段 (Prediction)
-
-给定 Q, G, Config 预测执行代价：
-
-- 单次/批量预测
-- 不确定性量化
-- 特征重要性分析
-- 模型保存/加载
-
-## 安装
+### 安装
 
 ```bash
 cd autoconfig
@@ -63,61 +14,75 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-## 快速开始
-
-### 运行示例
+### 使用命令行工具
 
 ```bash
-# 训练和预测完整流程
-python autoconfig/main.py
+# 1. 提取查询代码特征
+autoconfig query --input query.py --output out/query_features.yaml
 
-# 仅运行特征提取示例
-python autoconfig/examples/feature_extraction_example.py
+# 2. 提取图数据特征
+autoconfig graph --input data/edges.csv --output out/graph_features.yaml
 
-# 保存训练好的模型
-python autoconfig/main.py --save-model model.pkl
+# 3. 生成配置样本（LHS 采样）
+autoconfig config --num-samples 20 --output out/configs.yaml --use-default-catalog
+
+# 4. 完整管道
+autoconfig all --query query.py --graph data/ --config-n 20 --output out/
 ```
 
-### 代码示例
+---
 
-```python
-from autoconfig import CostPredictor, FeatureManager
-import networkx as nx
+## 功能特性
 
-# 1. 创建预测器
-predictor = CostPredictor()
+### 1. 查询代码特征提取
 
-# 2. 准备训练数据
-queries = [...]  # 查询代码/图列表
-graphs = [...]   # 数据图列表
-configs = [...]  # 配置列表
-times = [...]    # 实际执行时间
+从图查询源代码提取 20 个特征（8 个静态 + 12 个符号）：
 
-# 3. 训练模型
-metrics = predictor.train(queries, graphs, configs, times, verbose=True)
-
-# 4. 预测新查询
-query_code = """
-for v in G.vertices():
-    for neighbor in G.neighbors(v):
-        process(v, neighbor)
-"""
-
-graph = nx.erdos_renyi_graph(1000, 0.05)
-config = {'memory_limit': 8192, 'num_threads': 4, ...}
-
-predicted_time = predictor.predict(query_code, graph, config)
-print(f"预计执行时间：{predicted_time:.2f} ms")
+```bash
+autoconfig query --input bfs.py --output out/query.yaml
 ```
 
-## 文档
+**静态特征**: 循环、分支、递归、原子操作、同步等
 
-| 文档 | 说明 |
-|------|------|
-| [快速开始](docs/quickstart.md) | 5 分钟入门指南 |
-| [使用指南](docs/usage_guide.md) | 详细用法和 API 示例 |
-| [API 参考](docs/api_reference.md) | 完整类和函数文档 |
-| [特征提取](docs/feature_extraction.md) | 三阶段特征提取详解 |
+**符号特征**: VScan、EScan、FScan、RExp、Atom、Comm（用图统计实例化）
+
+### 2. 图数据特征提取
+
+从边列表格式提取图特征，支持单图和分图：
+
+```bash
+# 单图
+autoconfig graph --input graph.csv --output out/graph.yaml
+
+# 分图（文件夹）
+autoconfig graph --input partitions/ --output out/graph.yaml
+```
+
+**输出**: 顶点数、边数、度统计、直径、聚类系数、分区质量指标等
+
+### 3. 配置生成（LHS 采样）
+
+使用拉丁超立方采样生成配置样本：
+
+```bash
+autoconfig config --num-samples 20 --output out/configs.yaml --use-default-catalog
+```
+
+**配置**: (k 实例数，资源类型) 元组，覆盖 CPU、内存、存储、GPU 维度
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [CLI Guide](docs/CLI_GUIDE.md) | **Command-line tools detailed guide** |
+| [Feature Extraction](docs/FEATURE_EXTRACTION.md) | **Feature extraction methods (English)** |
+| [Usage Guide](docs/usage_guide.md) | Python API usage (Chinese) |
+| [API Reference](docs/api_reference.md) | Class and function documentation |
+| [Quick Start](docs/quickstart.md) | 5-minute introduction |
+
+---
 
 ## 项目结构
 
@@ -125,92 +90,154 @@ print(f"预计执行时间：{predicted_time:.2f} ms")
 autoconfig/
 ├── autoconfig/              # 主包
 │   ├── __init__.py
-│   ├── main.py              # 训练和预测入口
-│   ├── examples/            # 示例代码
+│   ├── main.py              # 训练管道
+│   ├── cli.py               # 命令行接口
 │   ├── feature_extractor/   # 特征提取模块
-│   │   ├── static_extractor.py      # 静态特征
-│   │   ├── symbolic_extractor.py    # 符号特征
-│   │   ├── graph_partition_extractor.py  # 图/分区特征
-│   │   ├── config_extractor.py      # 配置特征
-│   │   └── feature_manager.py       # 特征管理
+│   │   ├── static_extractor.py
+│   │   ├── symbolic_extractor.py
+│   │   ├── graph_partition_extractor.py
+│   │   └── feature_manager.py
 │   ├── models/              # 模型模块
-│   │   └── bayesian_model.py    # 贝叶斯模型
-│   └── prediction/          # 预测模块
-│       └── cost_predictor.py    # 代价预测器
-├── tests/                   # 单元测试
+│   │   └── bayesian_model.py
+│   ├── prediction/          # 预测模块
+│   │   └── cost_predictor.py
+│   └── utils/               # 工具模块
+│       ├── query_feature_extractor.py
+│       ├── graph_feature_extractor.py
+│       └── config_generator.py
+├── examples/                # 示例数据
+│   ├── query_bfs.py
+│   ├── graph_small.csv
+│   └── partitions/
+├── out/                     # 输出目录
 ├── docs/                    # 文档
+├── resources_template.yaml  # 资源目录模板
 ├── requirements.txt
-├── pyproject.toml
 └── README.md
 ```
 
-## 特征详细说明
+---
 
-### 静态特征 (Static Features)
+## 示例
 
-从查询源代码提取，与输入图无关：
+### 查询代码特征
 
-| 特征 | 识别模式 | 性能相关性 |
-|------|---------|-----------|
-| 循环计数 | for/while 结构 | 重复工作区域 |
-| 最大循环深度 | 嵌套循环 | 嵌套工作增长 |
-| 分支计数 | if/switch 条件 | 控制流不规则性 |
-| 变量计数 | 变量定义 | 局部状态大小 |
-| 递归计数 | 递归调用 | 搜索扩展 |
-| 原子操作计数 | atomicAdd/CAS | 并行竞争风险 |
-| 同步计数 | barrier/lock | 协调开销 |
-| 显式并行标志 | parallel  pragma | 并行开销 |
+```python
+# examples/query_bfs.py
+def BFS(Graph G, vertex source):
+    worklist = [source]
+    visited[source] = true
+    
+    while !worklist.empty():
+        for v in worklist:
+            for neighbor in G.neighbors(v):
+                if !visited[neighbor]:
+                    visited[neighbor] = true
+                    worklist.append(neighbor)
+```
 
-### 符号特征 (Symbolic Features)
+运行：
+```bash
+autoconfig query --input examples/query_bfs.py --output out/query.yaml
+```
 
-识别性能关键模式，用图统计实例化：
+输出：
+```yaml
+query_features:
+  static:
+    static_loop_count: 2.0
+    static_branch_count: 1.0
+    ...
+  symbolic:
+    sym_escan_coeff: 5000.0  # 边扫描
+    sym_fscan_coeff: 5000.0  # 前沿迭代
+    ...
+```
 
-| 模板 | 代码模式 | 实例化 | 性能影响 |
-|------|---------|--------|---------|
-| VScan | 顶点遍历 | \|V\| | 顶点线性工作 |
-| EScan | 边遍历 | \|E\| | 边遍历工作 |
-| FScan | worklist 循环 | D×\|E\|/D | 轮次敏感传播 |
-| RExp | 递归扩展 | avg_degree^D | 分支搜索增长 |
-| Atom | 原子更新 | \|E\|×skew | 竞争序列化 |
-| Comm | 跨分区通信 | ∑deg_∂(v) | 跨分区开销 |
+### 图数据特征
 
-### 图/分区特征
+边列表格式：
+```csv
+src,dst
+0,1
+0,2
+1,2
+2,3
+```
 
-| 类别 | 特征 |
-|------|------|
-| 图统计 | \|V\|, \|E\|, 直径，平均度，最大度，偏斜，聚类系数 |
-| 分区统计 | 分区数，边界顶点，边切割比，平衡度 |
+运行：
+```bash
+autoconfig graph --input examples/graph_small.csv --output out/graph.yaml
+```
 
-### 配置特征
+输出：
+```yaml
+graph_features:
+  basic:
+    num_vertices: 10
+    num_edges: 17
+  degree:
+    avg: 3.4
+    max: 4.0
+    skew: 1.18
+  structure:
+    diameter: 5
+    clustering_coeff: 0.63
+  ...
+```
 
-| 类别 | 参数 |
-|------|------|
-| 内存 | memory_limit, cache_size |
-| 并行 | num_threads, num_workers |
-| I/O | batch_size, io_buffer_size |
-| 优化 | enable_index, index_type, compression |
+### 配置生成
 
-## 评估指标
+运行：
+```bash
+autoconfig config --num-samples 10 --output out/configs.yaml --use-default-catalog
+```
 
-- **MAE**: 平均绝对误差
-- **RMSE**: 均方根误差
-- **MAPE**: 平均绝对百分比误差
-- **R²**: 决定系数
-- **Calibration**: 置信区间校准度
+输出：
+```yaml
+configurations:
+  - config_id: 0
+    k: 4
+    resource:
+      cpu_cores: 16
+      memory_gb: 64
+      num_gpus: 1
+  - config_id: 1
+    k: 8
+    resource:
+      cpu_cores: 32
+      memory_gb: 128
+      num_gpus: 4
+  ...
+```
 
-## 支持的语言
+---
 
-特征提取支持多种编程语言和伪代码：
+## 训练预测模型
 
-- C/C++
-- Python
-- Java/Scala
-- 伪代码格式
+```bash
+# 使用提取的特征训练贝叶斯模型
+autoconfig-train --n-train 100 --n-test 20
+```
+
+或使用 Python API：
+
+```python
+from autoconfig import CostPredictor
+
+predictor = CostPredictor()
+predictor.train(queries, graphs, configs, times)
+```
+
+---
 
 ## 参考资料
 
 - 特征提取方法基于 Hybrid 图查询成本估计研究
-- 贝叶斯模型参考数据库调优工作 (Bayesian Optimization, DBTune 等)
+- 贝叶斯模型参考数据库调优工作（Bayesian Optimization, DBTune 等）
+- LHS 采样方法用于高效配置空间探索
+
+---
 
 ## 许可证
 
