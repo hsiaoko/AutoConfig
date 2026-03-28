@@ -316,6 +316,52 @@ def generate_default_catalog() -> List[Dict[str, Any]]:
     ]
 
 
+def generate_simple_catalog(
+    cpu_cores: int,
+    memory_gb: int,
+    num_gpus: int = 0,
+    gpu_memory_gb: int = 0,
+    storage_gb: int = None
+) -> List[Dict[str, Any]]:
+    """
+    Generate a simple catalog from command-line parameters.
+    
+    Creates 3 variations based on the specified resource.
+    """
+    if storage_gb is None:
+        storage_gb = memory_gb * 10  # Default: 10x memory
+    
+    return [
+        # Small variation (1/2 resources)
+        {
+            'cpu_cores': max(1, cpu_cores // 2),
+            'memory_gb': max(1, memory_gb // 2),
+            'storage_gb': max(1, storage_gb // 2),
+            'num_gpus': max(0, num_gpus - 1),
+            'gpu_memory_gb': gpu_memory_gb // 2 if gpu_memory_gb else 0,
+            'gpu_sm_count': 0,
+        },
+        # Base configuration
+        {
+            'cpu_cores': cpu_cores,
+            'memory_gb': memory_gb,
+            'storage_gb': storage_gb,
+            'num_gpus': num_gpus,
+            'gpu_memory_gb': gpu_memory_gb,
+            'gpu_sm_count': 0,
+        },
+        # Large variation (2x resources)
+        {
+            'cpu_cores': cpu_cores * 2,
+            'memory_gb': memory_gb * 2,
+            'storage_gb': storage_gb * 2,
+            'num_gpus': num_gpus * 2,
+            'gpu_memory_gb': gpu_memory_gb * 2 if gpu_memory_gb else 0,
+            'gpu_sm_count': 0,
+        },
+    ]
+
+
 def main():
     """Command-line entry point."""
     parser = argparse.ArgumentParser(
@@ -402,4 +448,5 @@ def main():
 
 
 if __name__ == '__main__':
+    from .config_generator_main import main
     main()

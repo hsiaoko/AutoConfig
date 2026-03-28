@@ -38,44 +38,58 @@ class StaticFeatureExtractor:
             'static_explicit_parallel_flag',
         ]
         
-        # Patterns for different languages (including pseudo-code)
+        # Patterns for different languages (including pseudo-code and C++/CUDA)
         self.patterns = {
             # Loop patterns
-            'loop_for': r'\bfor\s+[\w]+\s+(?:in|:|=)\b',
-            'loop_for_paren': r'\bfor\s*\(',
+            'loop_for': r'\bfor\s*\(',
+            'loop_for_range': r'\bfor\s*\(\s*\w+\s*[=:]\s*\d+\s*;\s*\w+\s*<',
+            'loop_for_each': r'\bfor\s*\(\s*\w+\s+\w+\s*:\s*\w+\s*\)',
             'loop_while': r'\bwhile\s*\(',
-            'loop_while_simple': r'\bwhile\s+[\w]+\s*[!:.]',
-            'loop_foreach': r'\bfor\s*\(\s*\w+\s+:\s*\w+\s*\)',
+            'loop_foreach': r'\bfor\s*\(\s*\w+\s+in\s+\w+\.\w+\s*\)',
             'loop_prism': r'\bfor\s*\(\s*\w+\s+in\s+\w+\.\w+\s*\)',
+            'loop_cuda': r'<<<[^>]*>>>',  # CUDA kernel launch in loop
             
             # Branch patterns
-            'branch_if': r'\bif\s*[:(]',
-            'branch_if_simple': r'\bif\s+!',
+            'branch_if': r'\bif\s*\(',
+            'branch_if_cpp': r'\bif\s*\(\s*[^)]+\s*\)\s*\{',
             'branch_switch': r'\bswitch\s*\(',
             'branch_elif': r'\belif\s*\(',
+            'branch_else_if': r'\belse\s+if\s*\(',
             
             # Variable patterns
-            'var_decl': r'(?:int|float|double|char|bool|auto|var|let)\s+\w+',
-            'var_assign': r'^\s*\w+\s*=\s*',
+            'var_decl': r'(?:int|float|double|char|bool|auto|var|let|uint32_t|int32_t|size_t|void)\s+\*?\s*\w+',
+            'var_decl_cpp': r'(?:const|static|volatile)\s+(?:\w+\s+)+\w+',
+            'var_cuda_buffer': r'\b(?:DeviceOwnedBuffer|Buffer|deviceMalloc|cudaMalloc)\b',
             
             # Recursion (detected via function calls with same name)
             'func_def': r'(?:def|function)\s+(\w+)\s*[:(]',
-            'func_def_cpp': r'^\w+\s*\([^)]*\)\s*:',
+            'func_def_cpp': r'^\s*(?:static\s+)?(?:__forceinline__\s+)?(?:__device__\s+)?\w+\s+\w+\s*\([^)]*\)\s*\{',
+            'func_def_cpp_method': r'^\s*\w+\s+\w+::\w+\s*\([^)]*\)',
+            'func_kernel': r'\b__global__\s+\w+\s+\w+\s*\(',
             
             # Atomic operations
-            'atomic_add': r'\b(atomicAdd|atomic_add|fetch_add)\b',
+            'atomic_add': r'\b(atomicAdd|atomic_add|fetch_add|atomicInc)\b',
             'atomic_cas': r'\b(atomicCAS|atomic_compare_exchange|compare_and_swap)\b',
-            'atomic_store': r'\b(atomicStore|atomic_store|fetch_store)\b',
+            'atomic_store': r'\b(atomicStore|atomic_store|fetch_store|atomicExch)\b',
+            'atomic_cuda': r'\batomic(Add|Sub|Max|Min|And|Or|Xor|CAS|Exch)\b',
             
             # Synchronization
-            'sync_barrier': r'\b(barrier|__syncthreads|barrier_sync)\b',
-            'sync_lock': r'\b(lock|mutex\.lock|pthread_mutex_lock)\b',
-            'sync_wait': r'\b(wait|join|await)\b',
+            'sync_barrier': r'\b(barrier|__syncthreads|barrier_sync|cudaDeviceSynchronize)\b',
+            'sync_lock': r'\b(lock|mutex\.lock|pthread_mutex_lock|std::lock_guard)\b',
+            'sync_wait': r'\b(wait|join|await|cudaStreamSynchronize)\b',
+            'sync_cuda': r'\b(cudaDeviceSynchronize|cudaStreamSynchronize|cudaEventSynchronize)\b',
             
             # Parallel constructs
             'parallel_pragma': r'#pragma\s+(omp\s+parallel|parallel)',
             'parallel_for': r'#pragma\s+omp\s+parallel\s+for',
             'parallel_launch': r'\b(parallel_for|parallel_invoke|spawn)\b',
+            'cuda_kernel_launch': r'<<<\s*\w+\s*,\s*\w+\s*>>>',
+            'cuda_kernel_call': r'\w+Kernel\s*<<<',
+            
+            # CUDA specific
+            'cuda_memory': r'\b(cudaMalloc|cudaFree|cudaMemcpy|cudaMemset)\b',
+            'cuda_thread': r'\b(threadIdx|blockIdx|blockDim|gridDim)\b',
+            'cuda_shared': r'\b__shared__\s+\w+\s+\w+',
         }
     
     def extract(self, source_code: str) -> np.ndarray:
@@ -127,13 +141,13 @@ class StaticFeatureExtractor:
     def _count_loops(self, code: str) -> int:
         """Count loop constructs."""
         count = 0
-        for pattern in ['loop_for', 'loop_for_paren', 'loop_while', 'loop_while_simple', 
+        for pattern in ['loop_for', 'loop_for_range', 'loop_for_each', 'loop_while', 
                         'loop_foreach', 'loop_prism']:
             count += len(re.findall(self.patterns[pattern], code, re.IGNORECASE | re.MULTILINE))
         return count
     
     def _compute_max_loop_depth(self, code: str) -> int:
-        """Compute maximum loop nesting depth using indentation."""
+        """Compute maximum loop nesting depth using braces and indentation."""
         lines = code.split('\n')
         max_depth = 0
         current_depth = 0
@@ -146,7 +160,7 @@ class StaticFeatureExtractor:
             # Check if line starts a loop
             is_loop_start = any(
                 re.search(self.patterns[p], stripped)
-                for p in ['loop_for', 'loop_for_paren', 'loop_while', 'loop_while_simple',
+                for p in ['loop_for', 'loop_for_range', 'loop_for_each', 'loop_while',
                           'loop_foreach', 'loop_prism']
             )
             
@@ -155,9 +169,17 @@ class StaticFeatureExtractor:
                 current_depth = len(in_loop)
                 max_depth = max(max_depth, current_depth)
             
-            # Track depth by indentation
-            while in_loop and indent <= in_loop[-1] and not stripped.startswith('#'):
-                in_loop.pop()
+            # Track depth by braces
+            open_braces = stripped.count('{')
+            close_braces = stripped.count('}')
+            
+            if close_braces > 0 and in_loop:
+                for _ in range(close_braces):
+                    if in_loop and indent <= in_loop[-1]:
+                        in_loop.pop()
+                        current_depth = len(in_loop)
+            
+            if open_braces > 0 and is_loop_start:
                 current_depth = len(in_loop)
         
         return max_depth
@@ -165,20 +187,26 @@ class StaticFeatureExtractor:
     def _count_branches(self, code: str) -> int:
         """Count conditional branches."""
         count = 0
-        for pattern in ['branch_if', 'branch_if_simple', 'branch_switch', 'branch_elif']:
+        for pattern in ['branch_if', 'branch_if_cpp', 'branch_switch', 'branch_elif', 'branch_else_if']:
             count += len(re.findall(self.patterns[pattern], code, re.IGNORECASE | re.MULTILINE))
         return count
     
     def _count_variables(self, code: str) -> int:
         """Count variable definitions."""
-        # Type-based declarations
+        # Type-based declarations (including C++ types)
         count = len(re.findall(self.patterns['var_decl'], code))
         
+        # C++ style declarations
+        count += len(re.findall(self.patterns['var_decl_cpp'], code))
+        
+        # CUDA buffer declarations
+        count += len(re.findall(self.patterns['var_cuda_buffer'], code))
+        
         # Python-style assignments (simple heuristic)
-        python_assigns = len(re.findall(self.patterns['var_assign'], code, re.MULTILINE))
+        python_assigns = len(re.findall(self.patterns.get('var_assign', r'^\s*\w+\s*=\s*'), code, re.MULTILINE))
         
         # Pseudo-code style: variable declarations in function params
-        param_vars = len(re.findall(r'\b(?:Fragment|Context|Match|Pattern|Graph)\s+\w+', code))
+        param_vars = len(re.findall(r'\b(?:Fragment|Context|Match|Pattern|Graph|Buffer|Device)\s+\w+', code))
         
         return max(count, python_assigns) + param_vars
     
@@ -201,22 +229,34 @@ class StaticFeatureExtractor:
     def _count_atomic_ops(self, code: str) -> int:
         """Count atomic operations."""
         count = 0
-        for pattern in ['atomic_add', 'atomic_cas', 'atomic_store']:
+        for pattern in ['atomic_add', 'atomic_cas', 'atomic_store', 'atomic_cuda']:
             count += len(re.findall(self.patterns[pattern], code, re.IGNORECASE))
         return count
     
     def _count_synchronization(self, code: str) -> int:
         """Count synchronization primitives."""
         count = 0
-        for pattern in ['sync_barrier', 'sync_lock', 'sync_wait']:
+        for pattern in ['sync_barrier', 'sync_lock', 'sync_wait', 'sync_cuda']:
             count += len(re.findall(self.patterns[pattern], code, re.IGNORECASE))
         return count
     
     def _has_explicit_parallel(self, code: str) -> bool:
         """Check for explicit parallel constructs."""
+        # Check for CUDA kernel launches
+        if re.search(self.patterns['cuda_kernel_launch'], code):
+            return True
+        if re.search(self.patterns['cuda_kernel_call'], code):
+            return True
+        
+        # Check for OpenMP and other parallel constructs
         for pattern in ['parallel_pragma', 'parallel_for', 'parallel_launch']:
             if re.search(self.patterns[pattern], code, re.IGNORECASE):
                 return True
+        
+        # Check for CUDA thread indexing
+        if re.search(self.patterns['cuda_thread'], code):
+            return True
+        
         return False
     
     def extract_from_file(self, filepath: str) -> np.ndarray:

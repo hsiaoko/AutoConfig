@@ -1,0 +1,23 @@
+# System Capacity Configuration - Medium Cluster
+# 
+# Usage:
+#   autoconfig config --capacity data/conf/system_capacity_medium.yaml -n 15 -o out/configs.yaml
+
+# Total system resources
+total_cpu_cores: 256
+total_memory_gb: 1024
+total_storage_gb: 10000
+total_gpus: 16
+total_gpu_memory_gb: 512
+
+# Machine configuration
+machine:
+  cpu_cores: 32
+  memory_gb: 128
+  storage_gb: 1000
+  num_gpus: 2
+  gpu_memory_gb: 32
+  gpu_sm_count: 5120
+
+# Notes:
+# - Max machines = min(256/32, 1024/128, 16/2) = min(8, 8, 8) = 8 machines

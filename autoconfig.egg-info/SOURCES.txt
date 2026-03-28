@@ -23,7 +23,10 @@ autoconfig/models/bayesian_model.py
 autoconfig/prediction/__init__.py
 autoconfig/prediction/cost_predictor.py
 autoconfig/utils/__init__.py
+autoconfig/utils/capacity_config_generator.py
 autoconfig/utils/config_generator.py
+autoconfig/utils/config_generator_main.py
+autoconfig/utils/feature_merger.py
 autoconfig/utils/graph_feature_extractor.py
 autoconfig/utils/query_feature_extractor.py
 tests/test_autoconfig.py

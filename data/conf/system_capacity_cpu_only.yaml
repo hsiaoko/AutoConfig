@@ -1,0 +1,24 @@
+# System Capacity Configuration - CPU Only
+# 
+# Usage:
+#   autoconfig config --capacity data/conf/system_capacity_cpu_only.yaml -n 10 -o out/configs.yaml
+
+# Total system resources (no GPUs)
+total_cpu_cores: 128
+total_memory_gb: 512
+total_storage_gb: 5000
+total_gpus: 0
+total_gpu_memory_gb: 0
+
+# Machine configuration
+machine:
+  cpu_cores: 32
+  memory_gb: 128
+  storage_gb: 1000
+  num_gpus: 0
+  gpu_memory_gb: 0
+  gpu_sm_count: 0
+
+# Notes:
+# - Max machines = min(128/32, 512/128) = min(4, 4) = 4 machines
+# - No GPU resources

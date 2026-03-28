@@ -17,17 +17,27 @@ pip install -e .
 ### 使用命令行工具
 
 ```bash
-# 1. 提取查询代码特征
-autoconfig query --input query.py --output out/query_features.yaml
+# 1. 提取查询代码特征（使用占位符）
+autoconfig query --input data/queries/gar_match.cu --output out/query_features.yaml
 
 # 2. 提取图数据特征
 autoconfig graph --input data/edges.csv --output out/graph_features.yaml
 
 # 3. 生成配置样本（LHS 采样）
-autoconfig config --num-samples 20 --output out/configs.yaml --use-default-catalog
+autoconfig config --num-samples 20 --output out/config_features.yaml --use-default-catalog
 
-# 4. 完整管道
-autoconfig all --query query.py --graph data/ --config-n 20 --output out/
+# 4. 合并所有特征（实例化符号特征）
+autoconfig merge \
+    --query out/query_features.yaml \
+    --graph out/graph_features.yaml \
+    --config out/config_features.yaml \
+    --output out/merged_features.yaml
+```
+
+**完整管道**:
+```bash
+# 一键完成所有步骤
+autoconfig all --query query.cu --graph data/ --config-n 20 --output out/
 ```
 
 ---
@@ -72,13 +82,14 @@ autoconfig config --num-samples 20 --output out/configs.yaml --use-default-catal
 
 ---
 
-## Documentation
+## 文档
 
 | Document | Description |
 |----------|-------------|
-| [CLI Guide](docs/CLI_GUIDE.md) | **Command-line tools detailed guide** |
-| [Feature Extraction](docs/FEATURE_EXTRACTION.md) | **Feature extraction methods (English)** |
-| [Usage Guide](docs/usage_guide.md) | Python API usage (Chinese) |
+| [中文使用指南](docs/USAGE_GUIDE_CN.md) | **完整的中文使用文档** |
+| [CLI Guide](docs/CLI_GUIDE.md) | Command-line tools detailed guide |
+| [Feature Extraction](docs/FEATURE_EXTRACTION.md) | Feature extraction methods (English) |
+| [Usage Guide](docs/usage_guide.md) | Python API usage |
 | [API Reference](docs/api_reference.md) | Class and function documentation |
 | [Quick Start](docs/quickstart.md) | 5-minute introduction |
 

@@ -20,16 +20,26 @@ The feature extraction is based on the method described in the research paper fo
 
 Extracted from the query source code through lightweight static analysis. These features capture the program structure independent of the input graph.
 
+**Supported Languages:** Python, C/C++, CUDA, Pseudo-code
+
 | # | Feature | Code Pattern | Performance Relevance |
 |---|---------|--------------|----------------------|
-| 1 | `static_loop_count` | Loop constructs (for/while) | Repeated work regions |
+| 1 | `static_loop_count` | Loop constructs (for/while, CUDA `<<<>>>`) | Repeated work regions |
 | 2 | `static_max_loop_depth` | Nested loops | Nested work growth |
-| 3 | `static_branch_count` | Conditional branches (if/switch) | Control-flow irregularity |
-| 4 | `static_variable_count` | Variable definitions | Local state size |
+| 3 | `static_branch_count` | Conditional branches (if/switch/case) | Control-flow irregularity |
+| 4 | `static_variable_count` | Variable definitions (including CUDA buffers) | Local state size |
 | 5 | `static_recursion_count` | Recursive procedures | Search and propagation expansion |
-| 6 | `static_atomic_op_count` | Atomic updates on shared state | Parallel contention risk |
-| 7 | `static_sync_count` | Locks, barriers, synchronization | Coordination overhead |
-| 8 | `static_explicit_parallel_flag` | PRAM operator invocations | Parallel-execution overheads |
+| 6 | `static_atomic_op_count` | Atomic updates (`atomicAdd`, `atomicCAS`, etc.) | Parallel contention risk |
+| 7 | `static_sync_count` | Synchronization (`cudaDeviceSynchronize`, `__syncthreads`, barriers) | Coordination overhead |
+| 8 | `static_explicit_parallel_flag` | CUDA kernels, OpenMP, thread indexing | Parallel-execution overheads |
+
+**C++/CUDA Pattern Recognition:**
+- Loops: `for(int i=0; i<n; ++i)`, `for(uint32_t v=tid; v<n; v+=step)`
+- Branches: `if(...) { }`, `else if(...)`, `switch(...)`
+- Variables: `DeviceOwnedBuffer`, `Buffer<uint32_t>`, `const int32_t*`
+- Atomic ops: `atomicAdd()`, `atomicCAS()`, `atomicExch()`
+- Sync: `cudaDeviceSynchronize()`, `__syncthreads()`, `cudaStreamSynchronize()`
+- Parallel: `<<<dimGrid, dimBlock>>>`, `threadIdx.x`, `blockIdx.x`
 
 **Example Output:**
 ```yaml
@@ -49,24 +59,26 @@ query_features:
 
 Symbolic workload templates that capture dominant computation, communication, and synchronization patterns. These are partial functions instantiated with graph/partition statistics.
 
+**Supported Patterns:** Python, C/C++, CUDA, Pseudo-code
+
 | # | Template | Code Pattern | Instantiation | Requires |
 |---|----------|--------------|---------------|----------|
-| 1 | **VScan**(V, n) | Vertex-list scans, PRAM vertex operators | \|V\| or \|V\|/n | \|V\| |
-| 2 | **EScan**(E, n) | Edge-list scans, neighbor traversals | \|E\| or \|E\|/n | \|E\| |
-| 3 | **FScan**(G, n) | Worklist/frontier-driven loops | ∑_{t=1}^{D} \|E_t\| | D (diameter) |
-| 4 | **RExp**(G) | Recursive neighbor expansion | ∏_{i=1}^{D} E[deg(v_i)] | D, avg_degree |
-| 5 | **Atom**(G) | Atomic writes, compare-and-swap | \|E\| × skew(G) | \|E\|, skew |
-| 6 | **Comm**(G, F) | Cross-partition communication | ∑_{v ∈ V_∂} deg_∂(v) | boundary-degree stats |
+| 1 | **VScan**(V, n) | Vertex scans, `g.n_vertices`, CUDA vertex loops | \|V\| or \|V\|/n | \|V\| |
+| 2 | **EScan**(E, n) | Edge scans, `g.n_edges`, `g.e_src`, CUDA edge loops | \|E\| or \|E\|/n | \|E\| |
+| 3 | **FScan**(G, n) | Worklist loops, `curr_count > 0`, frontier expansion | ∑_{t=1}^{D} \|E_t\| | D (diameter) |
+| 4 | **RExp**(G) | Recursive expansion, `GARExpand`, `ExpandEmbeddings` | ∏_{i=1}^{D} E[deg(v_i)] | D, avg_degree |
+| 5 | **Atom**(G) | Atomic updates, `atomicAdd`, `atomicCAS` | \|E\| × skew(G) | \|E\|, skew |
+| 6 | **Comm**(G, F) | Cross-partition, `SendTo`, `IsMirror` | ∑_{v ∈ V_∂} deg_∂(v) | boundary-degree stats |
 
-**Pattern Recognition:**
-- Vertex scanning: `for v in G.vertices()`, `Vertices()`
-- Edge scanning: `for neighbor in G.neighbors(v)`, `out_edges()`
-- Frontier iteration: `while !worklist.empty()`, `frontier.next()`
-- Recursive expansion: `Expand(m, level+1, ...)`, recursive DFS/BFS
-- Atomic updates: `atomicAdd()`, `compare_and_swap()`
+**C++/CUDA Pattern Recognition:**
+- Vertex scanning: `for(uint32_t v=tid; v<g.n_vertices; v+=step)`, `g.n_vertices`
+- Edge scanning: `for(int ge=tid; ge<params.n_edges; ge+=step)`, `g.e_src[ge]`
+- Frontier iteration: `while(!worklist.empty())`, `curr_count > 0`, `next_count`
+- Recursive expansion: `GARExpandEmbeddingsKernel`, `Expand(m, level+1)`
+- Atomic updates: `atomicAdd(params.cand_count, 1)`
 - Cross-partition: `SendTo()`, `IsMirror()`, `Owner()`
 
-**Example Output:**
+**Example Output (Python BFS):**
 ```yaml
 query_features:
   symbolic:
@@ -80,6 +92,33 @@ query_features:
     sym_rexp_requires: 0.0
     sym_atom_coeff: 0.0
     sym_atom_requires: 0.0
+    sym_comm_coeff: 0.0
+    sym_comm_requires: 0.0
+```
+
+**Example Output (C++/CUDA GAR Match):**
+```yaml
+query_features:
+  static:
+    static_loop_count: 8.0           # Multiple CUDA kernel loops
+    static_max_loop_depth: 2.0       # Nested parallel loops
+    static_branch_count: 16.0        # Many conditional checks
+    static_variable_count: 53.0      # Many device buffers and parameters
+    static_recursion_count: 0.0
+    static_atomic_op_count: 4.0      # atomicAdd for candidate counting
+    static_sync_count: 7.0           # cudaDeviceSynchronize calls
+    static_explicit_parallel_flag: 1.0  # CUDA kernel launches
+  symbolic:
+    sym_vscan_coeff: 1000.0          # |V| vertex processing
+    sym_vscan_requires: 1.0
+    sym_escan_coeff: 5000.0          # |E| edge processing
+    sym_escan_requires: 1.0
+    sym_fscan_coeff: 0.0
+    sym_fscan_requires: 0.0
+    sym_rexp_coeff: 0.0
+    sym_rexp_requires: 0.0
+    sym_atom_coeff: 10000.0          # |E| × skew for atomic updates
+    sym_atom_requires: 1.0
     sym_comm_coeff: 0.0
     sym_comm_requires: 0.0
 ```

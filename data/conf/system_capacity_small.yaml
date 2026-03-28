@@ -1,0 +1,28 @@
+# System Capacity Configuration
+# This file defines the total available resources in the system
+# 
+# Usage:
+#   autoconfig config --capacity data/conf/system_capacity_small.yaml -n 10 -o out/configs.yaml
+
+# Total system resources
+total_cpu_cores: 64
+total_memory_gb: 256
+total_storage_gb: 2000
+total_gpus: 4
+total_gpu_memory_gb: 128
+
+# Machine configuration (optional)
+# If provided, configurations will be in units of this machine type
+machine:
+  cpu_cores: 16
+  memory_gb: 64
+  storage_gb: 500
+  num_gpus: 1
+  gpu_memory_gb: 32
+  gpu_sm_count: 2560
+
+# Notes:
+# - With this configuration:
+#   - Max machines = min(64/16, 256/64, 4/1) = min(4, 4, 4) = 4 machines
+# - Generated configs will have k ∈ [1, 4] machines
+# - Each machine has: 16 CPU, 64GB RAM, 1 GPU

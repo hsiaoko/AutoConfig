@@ -25,20 +25,7 @@ def cmd_query(args):
     from .utils.query_feature_extractor import QueryFeatureExtractor
     
     extractor = QueryFeatureExtractor()
-    
-    # Optional graph stats for symbolic features
-    graph_stats = None
-    if args.num_vertices and args.num_edges:
-        graph_stats = {
-            'num_vertices': args.num_vertices,
-            'num_edges': args.num_edges,
-            'diameter': args.diameter,
-            'avg_degree': args.num_edges / max(args.num_vertices, 1),
-            'max_degree': args.num_edges / args.num_vertices * 2,
-            'skew': 2.0,
-        }
-    
-    features = extractor.extract_from_file(args.input, graph_stats)
+    features = extractor.extract_from_file(args.input)
     
     # Add metadata
     features['metadata'] = {
@@ -53,6 +40,7 @@ def cmd_query(args):
     print(f"  Symbolic: {features['feature_count']['symbolic']}")
     print(f"  Total: {features['feature_count']['total']}")
     print(f"  Output: {args.output}")
+    print(f"  Note: Graph-dependent values use placeholders")
 
 
 def cmd_graph(args):
@@ -89,32 +77,92 @@ def cmd_config(args):
         ConfigGenerator,
         load_resource_catalog,
         generate_default_catalog,
+        generate_simple_catalog,
     )
-    
-    # Load catalog
+    from .utils.capacity_config_generator import (
+        CapacityConstrainedConfigGenerator,
+        load_capacity,
+    )
+
+    # Capacity-constrained generation
+    if args.capacity:
+        print(f"Loading system capacity: {args.capacity}")
+        capacity = load_capacity(args.capacity)
+        generator = CapacityConstrainedConfigGenerator(capacity)
+        
+        k_range = (args.k_min, args.k_max) if args.k_max else None
+        print(f"\nGenerating {args.num_samples} configurations using LHS...")
+        
+        result = generator.generate(args.num_samples, k_range)
+        generator.save_to_yaml(result, args.output)
+        
+        print(f"\nConfiguration generation complete:")
+        print(f"  Generated: {len(result['configurations'])} configurations")
+        print(f"  Max machines (by capacity): {result['metadata']['max_machines']}")
+        print(f"  Output: {args.output}")
+        
+        # Show sample configurations
+        print("\nSample configurations:")
+        for i, config in enumerate(result['configurations'][:3]):
+            r = config['resource']
+            gpu_str = f", {r.get('num_gpus', 0)} GPU" if r.get('num_gpus', 0) > 0 else ""
+            print(f"  Config {i}: k={config['k']} machines, "
+                  f"CPU={r.get('cpu_cores', '?')} cores, "
+                  f"Mem={r.get('memory_gb', '?')}GB{gpu_str}")
+        return
+
+    # Load or generate resource catalog
     if args.resource_catalog:
         print(f"Loading resource catalog: {args.resource_catalog}")
         catalog = load_resource_catalog(args.resource_catalog)
+    elif args.cpu and args.memory:
+        # Generate simple catalog from parameters
+        print(f"Generating simple catalog from parameters:")
+        print(f"  CPU: {args.cpu} cores")
+        print(f"  Memory: {args.memory} GB")
+        if args.gpu > 0:
+            print(f"  GPU: {args.gpu} (memory: {args.gpu_memory} GB)")
+        catalog = generate_simple_catalog(
+            args.cpu,
+            args.memory,
+            args.gpu,
+            args.gpu_memory,
+            args.storage
+        )
+        print(f"  Created {len(catalog)} resource variations")
     elif args.use_default_catalog:
         print("Using default cloud-like resource catalog")
         catalog = generate_default_catalog()
     else:
-        print("Error: Please provide --resource-catalog or --use-default-catalog")
-        sys.exit(1)
-    
+        print("Error: Please provide one of:")
+        print("  --capacity <file.yaml>  (system capacity)")
+        print("  --resource-catalog <file.yaml>")
+        print("  --cpu <cores> --memory <GB> [--gpu <num>] [--gpu-memory <GB>]")
+        print("  --use-default-catalog")
+        return
+
+    print(f"Catalog size: {len(catalog)} resources")
+
     # Generate configurations
     generator = ConfigGenerator(catalog)
-    k_range = (args.k_min, args.k_max)
-    
-    print(f"Generating {args.num_samples} configurations using LHS...")
+    k_range = (args.k_min, args.k_max if args.k_max else 16)
+
+    print(f"\nGenerating {args.num_samples} configurations using LHS...")
     print(f"K range: {k_range}")
-    
+
     result = generator.generate(args.num_samples, k_range)
     generator.save_to_yaml(result, args.output)
-    
-    print(f"Configuration generation complete:")
+
+    print(f"\nConfiguration generation complete:")
     print(f"  Generated: {len(result['configurations'])} configurations")
     print(f"  Output: {args.output}")
+    
+    # Show sample configurations
+    print("\nSample configurations:")
+    for i, config in enumerate(result['configurations'][:3]):
+        r = config['resource']
+        gpu_str = f", GPU={r.get('num_gpus', 0)}" if r.get('num_gpus', 0) > 0 else ""
+        print(f"  Config {i}: k={config['k']}, CPU={r.get('cpu_cores', '?')}, Mem={r.get('memory_gb', '?')}GB{gpu_str}")
 
 
 def cmd_all(args):
@@ -186,6 +234,22 @@ def cmd_all(args):
     print("=" * 60)
 
 
+def cmd_merge(args):
+    """Handle feature merging."""
+    from .utils.feature_merger import FeatureMerger
+    
+    merger = FeatureMerger()
+    result = merger.merge_all(args.query, args.graph, args.config)
+    merger.save_to_yaml(result, args.output)
+    
+    print(f"Features merged successfully:")
+    print(f"  Query: {args.query}")
+    print(f"  Graph: {args.graph}")
+    print(f"  Config: {args.config}")
+    print(f"  Output: {args.output}")
+    print(f"  Feature matrix: {result['metadata']['num_samples']} samples × {result['metadata']['num_features']} features")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='AutoConfig - Feature Extraction Tools',
@@ -215,9 +279,6 @@ Examples:
     query_parser = subparsers.add_parser('query', help='Extract query code features')
     query_parser.add_argument('--input', '-i', required=True, help='Input query source file')
     query_parser.add_argument('--output', '-o', default='out/query_features.yaml', help='Output YAML file')
-    query_parser.add_argument('--num-vertices', type=int, help='Estimated vertices')
-    query_parser.add_argument('--num-edges', type=int, help='Estimated edges')
-    query_parser.add_argument('--diameter', type=int, default=5, help='Estimated diameter')
     query_parser.set_defaults(func=cmd_query)
     
     # Graph command
@@ -229,11 +290,18 @@ Examples:
     # Config command
     config_parser = subparsers.add_parser('config', help='Generate configurations using LHS')
     config_parser.add_argument('--resource-catalog', '-c', help='Resource catalog YAML file')
+    config_parser.add_argument('--capacity', help='System capacity YAML file (capacity-constrained generation)')
     config_parser.add_argument('--num-samples', '-n', type=int, default=20, help='Number of samples')
     config_parser.add_argument('--k-min', type=int, default=1, help='Min instances')
-    config_parser.add_argument('--k-max', type=int, default=16, help='Max instances')
+    config_parser.add_argument('--k-max', type=int, default=None, help='Max instances (default: capacity-limited)')
     config_parser.add_argument('--output', '-o', default='out/config_features.yaml', help='Output YAML file')
     config_parser.add_argument('--use-default-catalog', action='store_true', help='Use default catalog')
+    # Simple catalog parameters
+    config_parser.add_argument('--cpu', type=int, default=None, help='CPU cores')
+    config_parser.add_argument('--memory', type=int, default=None, help='Memory in GB')
+    config_parser.add_argument('--gpu', type=int, default=0, help='Number of GPUs')
+    config_parser.add_argument('--gpu-memory', type=int, default=0, help='GPU memory in GB')
+    config_parser.add_argument('--storage', type=int, default=None, help='Storage in GB')
     config_parser.set_defaults(func=cmd_config)
     
     # All command
@@ -245,6 +313,14 @@ Examples:
     all_parser.add_argument('--k-max', type=int, default=16, help='Max instances')
     all_parser.add_argument('--output', '-o', default='out/', help='Output directory')
     all_parser.set_defaults(func=cmd_all)
+    
+    # Merge command
+    merge_parser = subparsers.add_parser('merge', help='Merge query, graph, and config features')
+    merge_parser.add_argument('--query', '-q', required=True, help='Query features YAML')
+    merge_parser.add_argument('--graph', '-g', required=True, help='Graph features YAML')
+    merge_parser.add_argument('--config', '-c', required=True, help='Config features YAML')
+    merge_parser.add_argument('--output', '-o', default='out/merged_features.yaml', help='Output merged YAML')
+    merge_parser.set_defaults(func=cmd_merge)
     
     args = parser.parse_args()
     

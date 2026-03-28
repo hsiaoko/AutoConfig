@@ -40,23 +40,27 @@ class SymbolicFeatureExtractor:
             'sym_comm_requires',    # Requires boundary-degree flag
         ]
         
-        # Code patterns for symbolic feature detection (including pseudo-code)
+        # Code patterns for symbolic feature detection (including pseudo-code and C++/CUDA)
         self.patterns = {
             # Vertex scanning patterns
             'vertex_scan': [
-                r'\bfor\s+\w+\s+in\s+\w*\.?vertices\b',
-                r'\bfor\s+\w+\s*:\s*\w*\.?vertices\b',
+                r'\bfor\s*\(\s*\w+\s+in\s+\w*\.?vertices\b',
+                r'\bfor\s*\(\s*\w+\s*:\s*\w*\.?vertices\b',
+                r'\bfor\s*\([^;]+;\s*[^;]+<\s*v_?count\b',
                 r'\.Vertices\s*\(\s*\)',
                 r'\bgraph\s*\.?\s*vertices\s*\(\s*\)',
                 r'\bfor_each_vertex\s*\(',
                 r'\bvertex_range\s*\(',
                 r'\bF\s*\.?\s*Vertices\s*\(\s*\)',
+                r'\bg\.n_vertices\b',
+                r'\bgraph\.n_vertices\b',
             ],
             
             # Edge scanning patterns
             'edge_scan': [
-                r'\bfor\s+\w+\s+in\s+\w*\.?edges\b',
-                r'\bfor\s+\w+\s*:\s*\w*\.?edges\b',
+                r'\bfor\s*\(\s*\w+\s+in\s+\w*\.?edges\b',
+                r'\bfor\s*\(\s*\w+\s*:\s*\w*\.?edges\b',
+                r'\bfor\s*\([^;]+;\s*[^;]+<\s*e_?count\b',
                 r'\.Edges\s*\(\s*\)',
                 r'\bgraph\s*\.?\s*edges\s*\(\s*\)',
                 r'\bfor_each_edge\s*\(',
@@ -67,17 +71,24 @@ class SymbolicFeatureExtractor:
                 r'\bG\s*\.?\s*neighbors\s*\(',
                 r'\bG\s*\.?\s*out_edges\s*\(',
                 r'\bG\s*\.?\s*in_edges\s*\(',
+                r'\bg\.e_src\b',
+                r'\bg\.e_dst\b',
+                r'\bg\.n_edges\b',
+                r'\bgraph\.n_edges\b',
             ],
             
             # Frontier iteration patterns
             'frontier_scan': [
                 r'\bwhile\s+!\s*\w*\.?\s*empty\s*\(\s*\)',
+                r'\bwhile\s*\(\s*!\s*\w*\.?\s*empty\s*\(\s*\)\s*\)',
                 r'\bwhile\s+!\s*\w*\.?\s*Empty\s*\(\s*\)',
                 r'\bworklist\s*\.\s*(?:pop|front|dequeue|empty)\s*\(',
                 r'\bfrontier\s*\.\s*(?:next|advance|iterate)\s*\(',
                 r'\bactive_set\s*\.\s*(?:update|process)\s*\(',
                 r'\bfor\s+.*\s+in\s+1\s*\.\.\s*\w*',
                 r'\biteration\s*<\s*\w*\.?\s*diameter\b',
+                r'\bcurr_count\s*>\s*0\b',
+                r'\bnext_count\s*>\s*0\b',
             ],
             
             # Recursive expansion patterns
@@ -87,6 +98,8 @@ class SymbolicFeatureExtractor:
                 r'\bdfs\s*\([^)]*depth\s*\+\s*1',
                 r'\bbfs\s*\([^)]*level\s*\+\s*1',
                 r'\bsearch\s*\([^)]*step\s*\+\s*1',
+                r'\bGARExpand\b',
+                r'\bExpandEmbeddings\b',
             ],
             
             # Atomic update patterns
@@ -97,6 +110,7 @@ class SymbolicFeatureExtractor:
                 r'\bcompare_and_swap\s*\(',
                 r'\bfetch_add\s*\(',
                 r'\batomic\s*<\s*\w+\s*>\s*::\s*add\s*\(',
+                r'\batomic(Add|Sub|Max|Min|Inc)\b',
             ],
             
             # Cross-partition communication patterns
@@ -112,8 +126,74 @@ class SymbolicFeatureExtractor:
                 r'\bctx\s*\.?\s*SendTo\b',
                 r'\bcontext\s*\.?\s*Owner\b',
             ],
+            
+            # CUDA specific patterns
+            'cuda_vertex_processing': [
+                r'\bfor\s*\(\s*(?:unsigned\s+)?(?:int|uint)\s+\w+\s*=\s*_tid\b',
+                r'\bthreadIdx\.x\b',
+                r'\bblockIdx\.x\b',
+                r'\bblockDim\.x\b',
+                r'\bgridDim\.x\b',
+                r'\bstep\s*=\s*blockDim\.x\s*\*\s*gridDim\.x\b',
+                r'\bfor\s*\([^;]+;\s*\w+\s*<\s*n_vertices\b',
+            ],
+            
+            'cuda_edge_processing': [
+                r'\bfor\s*\([^;]+;\s*\w+\s*<\s*n_edges\b',
+                r'\bge\s*<\s*params\.n_edges\b',
+                r'\bfor\s*\([^;]+;\s*\w+\s*<\s*params\.n_edges\b',
+            ],
         }
-    
+
+    def extract_templates(
+        self,
+        source_code: str
+    ) -> np.ndarray:
+        """
+        Extract symbolic feature templates without graph instantiation.
+        
+        Uses placeholders (1.0) for coefficients that require graph statistics.
+        
+        Args:
+            source_code: Source code string
+            
+        Returns:
+            numpy array of symbolic features with placeholders
+        """
+        features = []
+
+        # 1. Vertex scanning - detect pattern, use placeholder
+        vscan_detected = self._detect_vertex_scan(source_code)
+        features.append(1.0 if vscan_detected else 0.0)  # placeholder
+        features.append(1.0 if vscan_detected else 0.0)
+
+        # 2. Edge scanning - detect pattern, use placeholder
+        escan_detected = self._detect_edge_scan(source_code)
+        features.append(1.0 if escan_detected else 0.0)  # placeholder
+        features.append(1.0 if escan_detected else 0.0)
+
+        # 3. Frontier iteration - detect pattern, use placeholder
+        fscan_detected = self._detect_frontier_scan(source_code)
+        features.append(1.0 if fscan_detected else 0.0)  # placeholder
+        features.append(1.0 if fscan_detected else 0.0)
+
+        # 4. Recursive expansion - detect pattern, use placeholder
+        rexp_detected = self._detect_recursive_exp(source_code)
+        features.append(1.0 if rexp_detected else 0.0)  # placeholder
+        features.append(1.0 if rexp_detected else 0.0)
+
+        # 5. Atomic update - detect pattern, use placeholder
+        atom_detected = self._detect_atomic_update(source_code)
+        features.append(1.0 if atom_detected else 0.0)  # placeholder
+        features.append(1.0 if atom_detected else 0.0)
+
+        # 6. Cross-partition communication - detect pattern, use placeholder
+        comm_detected = self._detect_cross_partition(source_code)
+        features.append(1.0 if comm_detected else 0.0)  # placeholder
+        features.append(1.0 if comm_detected else 0.0)
+
+        return np.array(features, dtype=np.float64)
+
     def extract(
         self,
         source_code: str,
@@ -166,7 +246,51 @@ class SymbolicFeatureExtractor:
         features.append(1.0 if comm_req else 0.0)
         
         return np.array(features, dtype=np.float64)
+
+    # Detection methods (without graph instantiation)
     
+    def _detect_vertex_scan(self, code: str) -> bool:
+        """Detect vertex scanning patterns."""
+        for pattern in self.patterns['vertex_scan']:
+            if re.search(pattern, code, re.IGNORECASE):
+                return True
+        return False
+    
+    def _detect_edge_scan(self, code: str) -> bool:
+        """Detect edge scanning patterns."""
+        for pattern in self.patterns['edge_scan']:
+            if re.search(pattern, code, re.IGNORECASE):
+                return True
+        return False
+    
+    def _detect_frontier_scan(self, code: str) -> bool:
+        """Detect frontier iteration patterns."""
+        for pattern in self.patterns['frontier_scan']:
+            if re.search(pattern, code, re.IGNORECASE):
+                return True
+        return False
+    
+    def _detect_recursive_exp(self, code: str) -> bool:
+        """Detect recursive expansion patterns."""
+        for pattern in self.patterns['recursive_exp']:
+            if re.search(pattern, code, re.IGNORECASE):
+                return True
+        return False
+    
+    def _detect_atomic_update(self, code: str) -> bool:
+        """Detect atomic update patterns."""
+        for pattern in self.patterns['atomic_update']:
+            if re.search(pattern, code, re.IGNORECASE):
+                return True
+        return False
+    
+    def _detect_cross_partition(self, code: str) -> bool:
+        """Detect cross-partition communication patterns."""
+        for pattern in self.patterns['cross_partition']:
+            if re.search(pattern, code, re.IGNORECASE):
+                return True
+        return False
+
     def _extract_vertex_scan(
         self,
         code: str,

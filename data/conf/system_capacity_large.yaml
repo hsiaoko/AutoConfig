@@ -1,0 +1,23 @@
+# System Capacity Configuration - Large GPU Cluster
+# 
+# Usage:
+#   autoconfig config --capacity data/conf/system_capacity_large.yaml -n 20 -o out/configs.yaml
+
+# Total system resources
+total_cpu_cores: 512
+total_memory_gb: 2048
+total_storage_gb: 20000
+total_gpus: 32
+total_gpu_memory_gb: 1024
+
+# Machine configuration
+machine:
+  cpu_cores: 64
+  memory_gb: 256
+  storage_gb: 2000
+  num_gpus: 4
+  gpu_memory_gb: 32
+  gpu_sm_count: 10240
+
+# Notes:
+# - Max machines = min(512/64, 2048/256, 32/4) = min(8, 8, 8) = 8 machines
