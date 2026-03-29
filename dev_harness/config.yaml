@@ -1,0 +1,59 @@
+# AutoConfig Development Harness Configuration
+
+# LLM Configuration
+llm:
+  # Provider: openai, anthropic, etc.
+  provider: openai
+  # Model name
+  model: gpt-4o-mini
+  # Temperature for generation (0.0 - 1.0)
+  temperature: 0.2
+  # Max tokens for responses
+  max_tokens: 4096
+
+# API Keys (set via environment variables or here)
+# api_keys:
+#   openai: sk-...
+#   anthropic: sk-ant-...
+
+# Project Settings
+project:
+  # Root directory (relative to config file)
+  root: ..
+  # Python version for syntax checking
+  python_version: "3.8"
+  # Test framework
+  test_framework: pytest
+
+# Agent Settings
+agents:
+  # Enable/disable specific agents
+  dev: true
+  test: true
+  doc: true
+  review: true
+  
+  # Verbose output
+  verbose: false
+
+# Pipeline Settings
+pipeline:
+  # Default workflow steps
+  default_workflow:
+    - dev
+    - test
+    - review
+    - doc
+  
+  # Maximum iterations per agent
+  max_iterations: 10
+  
+  # Timeout per agent task (seconds)
+  timeout: 300
+
+# Output Settings
+output:
+  # Directory for logs and artifacts
+  log_dir: .harness-logs
+  # Save intermediate results
+  save_intermediate: true

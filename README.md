@@ -42,6 +42,50 @@ autoconfig all --query query.cu --graph data/ --config-n 20 --output out/
 
 ---
 
+## 多 Agent 开发系统
+
+本项目配备了基于 LangChain 的多 Agent 开发自动化系统，可用于：
+
+- **DevAgent** - 自动实现功能、修复 Bug
+- **TestAgent** - 自动生成单元测试
+- **DocAgent** - 自动生成文档
+- **ReviewAgent** - 代码审查
+
+### 安装开发依赖
+
+```bash
+pip install langchain langchain-openai langchain-community pyyaml
+```
+
+### 配置
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+### 使用
+
+```bash
+# 查看状态
+python -m dev_harness status
+
+# 列出 Agent
+python -m dev_harness list-agents
+
+# 运行开发任务
+python -m dev_harness run --task "为 config_generator.py 添加 GPU 资源支持"
+
+# 运行测试 Agent
+python -m dev_harness run --agent test --target autoconfig/utils/config_generator.py
+
+# 运行完整管道
+python -m dev_harness pipeline --task "实现 GPU 资源配置功能"
+```
+
+详细文档请参阅 [dev_harness/README.md](dev_harness/README.md) 和 [dev_harness/QUICKSTART.md](dev_harness/QUICKSTART.md)。
+
+---
+
 ## 功能特性
 
 ### 1. 查询代码特征提取
