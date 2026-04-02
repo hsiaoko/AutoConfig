@@ -1,0 +1,4 @@
+cost_model: {test_r2: -21.68844623932897, train_r2: -66.0536798351364}
+dataset: {feature_dim: 16, test_samples: 2, total_samples: 10, train_samples: 8}
+time_model: {test_r2: -8.465285928457966, train_r2: -1.230304857726992}
+trained_at: '2026-04-02T22:28:07.476382'

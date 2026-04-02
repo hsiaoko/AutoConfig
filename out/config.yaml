@@ -1,0 +1,380 @@
+config_features:
+- conf_batch_size: 1000
+  conf_cache_size: !!python/object/apply:numpy.core.multiarray.scalar
+  - &id001 !!python/object/apply:numpy.dtype
+    args:
+    - i8
+    - false
+    - true
+    state: !!python/tuple
+    - 3
+    - <
+    - null
+    - null
+    - null
+    - -1
+    - -1
+    - 0
+  - !!binary |
+    ACAAAAAAAAA=
+  conf_compression_enabled: 0.0
+  conf_enable_index: 1.0
+  conf_index_type: 1.0
+  conf_io_buffer_size: 64
+  conf_k_instances: 1
+  conf_memory_limit: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AAABAAAAAAA=
+  conf_num_threads: &id002 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    EAAAAAAAAAA=
+  conf_num_workers: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    BAAAAAAAAAA=
+  conf_per_instance:
+    cpu_cores: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      EAAAAAAAAAA=
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      IAAAAAAAAAA=
+    memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      QAAAAAAAAAA=
+    num_gpus: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      AQAAAAAAAAA=
+    storage_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      9AEAAAAAAAA=
+  conf_timeout: 300
+  conf_total_cpu_cores: *id002
+  conf_total_gpus: &id008 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AQAAAAAAAAA=
+  conf_total_memory_gb: &id007 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    QAAAAAAAAAA=
+  conf_total_storage_gb: &id009 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    9AEAAAAAAAA=
+- conf_batch_size: 1000
+  conf_cache_size: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AGAAAAAAAAA=
+  conf_compression_enabled: 0.0
+  conf_enable_index: 1.0
+  conf_index_type: 1.0
+  conf_io_buffer_size: 64
+  conf_k_instances: 3
+  conf_memory_limit: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AAADAAAAAAA=
+  conf_num_threads: &id003 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    MAAAAAAAAAA=
+  conf_num_workers: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    DAAAAAAAAAA=
+  conf_per_instance:
+    cpu_cores: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      EAAAAAAAAAA=
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      IAAAAAAAAAA=
+    memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      QAAAAAAAAAA=
+    num_gpus: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      AQAAAAAAAAA=
+    storage_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      9AEAAAAAAAA=
+  conf_timeout: 300
+  conf_total_cpu_cores: *id003
+  conf_total_gpus: &id011 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AwAAAAAAAAA=
+  conf_total_memory_gb: &id010 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    wAAAAAAAAAA=
+  conf_total_storage_gb: &id012 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    3AUAAAAAAAA=
+- conf_batch_size: 1000
+  conf_cache_size: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AGAAAAAAAAA=
+  conf_compression_enabled: 0.0
+  conf_enable_index: 1.0
+  conf_index_type: 1.0
+  conf_io_buffer_size: 64
+  conf_k_instances: 3
+  conf_memory_limit: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AAADAAAAAAA=
+  conf_num_threads: &id004 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    MAAAAAAAAAA=
+  conf_num_workers: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    DAAAAAAAAAA=
+  conf_per_instance:
+    cpu_cores: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      EAAAAAAAAAA=
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      IAAAAAAAAAA=
+    memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      QAAAAAAAAAA=
+    num_gpus: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      AQAAAAAAAAA=
+    storage_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      9AEAAAAAAAA=
+  conf_timeout: 300
+  conf_total_cpu_cores: *id004
+  conf_total_gpus: &id014 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AwAAAAAAAAA=
+  conf_total_memory_gb: &id013 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    wAAAAAAAAAA=
+  conf_total_storage_gb: &id015 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    3AUAAAAAAAA=
+- conf_batch_size: 1000
+  conf_cache_size: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AEAAAAAAAAA=
+  conf_compression_enabled: 0.0
+  conf_enable_index: 1.0
+  conf_index_type: 1.0
+  conf_io_buffer_size: 64
+  conf_k_instances: 2
+  conf_memory_limit: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AAACAAAAAAA=
+  conf_num_threads: &id005 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    IAAAAAAAAAA=
+  conf_num_workers: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    CAAAAAAAAAA=
+  conf_per_instance:
+    cpu_cores: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      EAAAAAAAAAA=
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      IAAAAAAAAAA=
+    memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      QAAAAAAAAAA=
+    num_gpus: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      AQAAAAAAAAA=
+    storage_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      9AEAAAAAAAA=
+  conf_timeout: 300
+  conf_total_cpu_cores: *id005
+  conf_total_gpus: &id017 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AgAAAAAAAAA=
+  conf_total_memory_gb: &id016 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    gAAAAAAAAAA=
+  conf_total_storage_gb: &id018 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    6AMAAAAAAAA=
+- conf_batch_size: 1000
+  conf_cache_size: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AIAAAAAAAAA=
+  conf_compression_enabled: 0.0
+  conf_enable_index: 1.0
+  conf_index_type: 1.0
+  conf_io_buffer_size: 64
+  conf_k_instances: 4
+  conf_memory_limit: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AAAEAAAAAAA=
+  conf_num_threads: &id006 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    QAAAAAAAAAA=
+  conf_num_workers: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    EAAAAAAAAAA=
+  conf_per_instance:
+    cpu_cores: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      EAAAAAAAAAA=
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      IAAAAAAAAAA=
+    memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      QAAAAAAAAAA=
+    num_gpus: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      AQAAAAAAAAA=
+    storage_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      9AEAAAAAAAA=
+  conf_timeout: 300
+  conf_total_cpu_cores: *id006
+  conf_total_gpus: &id020 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    BAAAAAAAAAA=
+  conf_total_memory_gb: &id019 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    AAEAAAAAAAA=
+  conf_total_storage_gb: &id021 !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    0AcAAAAAAAA=
+configurations:
+- config_id: 0
+  k: 1
+  resource:
+    cpu_cores: *id002
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      IAAAAAAAAAA=
+    gpu_sm_count: 2560
+    memory_gb: *id007
+    num_gpus: *id008
+    storage_gb: *id009
+- config_id: 1
+  k: 3
+  resource:
+    cpu_cores: *id003
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      YAAAAAAAAAA=
+    gpu_sm_count: 2560
+    memory_gb: *id010
+    num_gpus: *id011
+    storage_gb: *id012
+- config_id: 2
+  k: 3
+  resource:
+    cpu_cores: *id004
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      YAAAAAAAAAA=
+    gpu_sm_count: 2560
+    memory_gb: *id013
+    num_gpus: *id014
+    storage_gb: *id015
+- config_id: 3
+  k: 2
+  resource:
+    cpu_cores: *id005
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      QAAAAAAAAAA=
+    gpu_sm_count: 2560
+    memory_gb: *id016
+    num_gpus: *id017
+    storage_gb: *id018
+- config_id: 4
+  k: 4
+  resource:
+    cpu_cores: *id006
+    gpu_memory_gb: !!python/object/apply:numpy.core.multiarray.scalar
+    - *id001
+    - !!binary |
+      gAAAAAAAAAA=
+    gpu_sm_count: 2560
+    memory_gb: *id019
+    num_gpus: *id020
+    storage_gb: *id021
+metadata:
+  k_range:
+  - 1
+  - 4
+  max_machines: 4
+  num_samples: 5
+  sampling_method: latin_hypercube_capacity_constrained
+system_capacity:
+  machine:
+    cpu_cores: 16
+    gpu_memory_gb: 32
+    gpu_sm_count: 2560
+    memory_gb: 64
+    num_gpus: 1
+    storage_gb: 500
+  total_cpu_cores: 64
+  total_gpu_memory_gb: 128
+  total_gpus: 4
+  total_memory_gb: 256
+  total_storage_gb: 2000

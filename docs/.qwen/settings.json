@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/hsiaoko/Projects/AutoConfig/**)",
+      "Read(//Users/hsiaoko/.qwen/**)",
+      "WebSearch"
+    ]
+  },
+  "$version": 3
+}

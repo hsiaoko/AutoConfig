@@ -2,17 +2,23 @@
 """
 AutoConfig CLI - Unified Command-Line Interface
 
-Tools for extracting features from:
-1. Query code
-2. Graph data (edge list)
-3. System configurations (LHS sampling)
+Tools for:
+1. Feature extraction (query, graph, config)
+2. Offline training (data generation, model training)
+3. Online configuration recommendation
 
 Usage:
+    # Feature extraction
     autoconfig query --input query.py --output out/query.yaml
     autoconfig graph --input data/edges.csv --output out/graph.yaml
-    autoconfig graph --input data/partitions/ --output out/graph.yaml
     autoconfig config --num-samples 20 --output out/configs.yaml
-    autoconfig all --query query.py --graph data/ --config-n 20 --output out/
+
+    # Offline training
+    autoconfig train --n-samples 500 --output data/models/
+    autoconfig generate-data --n-samples 200 --output data/generated/
+
+    # Online recommendation
+    autoconfig recommend --query bfs --graph data/graph.csv --top-n 3
 """
 
 import argparse
@@ -23,33 +29,31 @@ from pathlib import Path
 def cmd_query(args):
     """Handle query feature extraction."""
     from .utils.query_feature_extractor import QueryFeatureExtractor
-    
+
     extractor = QueryFeatureExtractor()
     features = extractor.extract_from_file(args.input)
-    
-    # Add metadata
+
     features['metadata'] = {
         'input_file': args.input,
         'output_file': args.output,
     }
-    
+
     extractor.save_to_yaml(features, args.output)
-    
+
     print(f"Query features extracted:")
     print(f"  Static: {features['feature_count']['static']}")
     print(f"  Symbolic: {features['feature_count']['symbolic']}")
     print(f"  Total: {features['feature_count']['total']}")
     print(f"  Output: {args.output}")
-    print(f"  Note: Graph-dependent values use placeholders")
 
 
 def cmd_graph(args):
     """Handle graph feature extraction."""
     from .utils.graph_feature_extractor import GraphFeatureExtractor
-    
+
     extractor = GraphFeatureExtractor()
     input_path = Path(args.input)
-    
+
     if input_path.is_file():
         print(f"Processing single graph: {args.input}")
         features = extractor.extract_single(args.input)
@@ -59,15 +63,14 @@ def cmd_graph(args):
     else:
         print(f"Error: Input path does not exist: {args.input}")
         sys.exit(1)
-    
+
     extractor.save_to_yaml(features, args.output)
-    
+
     gf = features['graph_features']
     print(f"Graph features extracted:")
     print(f"  Vertices: {gf['basic']['num_vertices']}")
     print(f"  Edges: {gf['basic']['num_edges']}")
     print(f"  Partitions: {gf['partition']['num_partitions']}")
-    print(f"  Balance: {gf['partition']['balance']:.4f}")
     print(f"  Output: {args.output}")
 
 
@@ -75,235 +78,286 @@ def cmd_config(args):
     """Handle configuration generation."""
     from .utils.config_generator import (
         ConfigGenerator,
-        load_resource_catalog,
         generate_default_catalog,
-        generate_simple_catalog,
-    )
-    from .utils.capacity_config_generator import (
-        CapacityConstrainedConfigGenerator,
-        load_capacity,
     )
 
-    # Capacity-constrained generation
-    if args.capacity:
-        print(f"Loading system capacity: {args.capacity}")
-        capacity = load_capacity(args.capacity)
-        generator = CapacityConstrainedConfigGenerator(capacity)
-        
-        k_range = (args.k_min, args.k_max) if args.k_max else None
-        print(f"\nGenerating {args.num_samples} configurations using LHS...")
-        
-        result = generator.generate(args.num_samples, k_range)
-        generator.save_to_yaml(result, args.output)
-        
-        print(f"\nConfiguration generation complete:")
-        print(f"  Generated: {len(result['configurations'])} configurations")
-        print(f"  Max machines (by capacity): {result['metadata']['max_machines']}")
-        print(f"  Output: {args.output}")
-        
-        # Show sample configurations
-        print("\nSample configurations:")
-        for i, config in enumerate(result['configurations'][:3]):
-            r = config['resource']
-            gpu_str = f", {r.get('num_gpus', 0)} GPU" if r.get('num_gpus', 0) > 0 else ""
-            print(f"  Config {i}: k={config['k']} machines, "
-                  f"CPU={r.get('cpu_cores', '?')} cores, "
-                  f"Mem={r.get('memory_gb', '?')}GB{gpu_str}")
-        return
-
-    # Load or generate resource catalog
-    if args.resource_catalog:
-        print(f"Loading resource catalog: {args.resource_catalog}")
-        catalog = load_resource_catalog(args.resource_catalog)
-    elif args.cpu and args.memory:
-        # Generate simple catalog from parameters
-        print(f"Generating simple catalog from parameters:")
-        print(f"  CPU: {args.cpu} cores")
-        print(f"  Memory: {args.memory} GB")
-        if args.gpu > 0:
-            print(f"  GPU: {args.gpu} (memory: {args.gpu_memory} GB)")
-        catalog = generate_simple_catalog(
-            args.cpu,
-            args.memory,
-            args.gpu,
-            args.gpu_memory,
-            args.storage
-        )
-        print(f"  Created {len(catalog)} resource variations")
-    elif args.use_default_catalog:
-        print("Using default cloud-like resource catalog")
-        catalog = generate_default_catalog()
-    else:
-        print("Error: Please provide one of:")
-        print("  --capacity <file.yaml>  (system capacity)")
-        print("  --resource-catalog <file.yaml>")
-        print("  --cpu <cores> --memory <GB> [--gpu <num>] [--gpu-memory <GB>]")
-        print("  --use-default-catalog")
-        return
-
-    print(f"Catalog size: {len(catalog)} resources")
-
-    # Generate configurations
+    print("Generating configurations using LHS...")
+    catalog = generate_default_catalog()
     generator = ConfigGenerator(catalog)
-    k_range = (args.k_min, args.k_max if args.k_max else 16)
-
-    print(f"\nGenerating {args.num_samples} configurations using LHS...")
-    print(f"K range: {k_range}")
+    k_range = (args.k_min, args.k_max)
 
     result = generator.generate(args.num_samples, k_range)
     generator.save_to_yaml(result, args.output)
 
-    print(f"\nConfiguration generation complete:")
+    print(f"Configuration generation complete:")
     print(f"  Generated: {len(result['configurations'])} configurations")
     print(f"  Output: {args.output}")
+
+
+def cmd_train(args):
+    """Handle model training."""
+    from .offline.trainer import Trainer
+
+    print("=" * 60)
+    print("Training Bayesian Models")
+    print("=" * 60)
+
+    trainer = Trainer(args.output)
+
+    dataset_path = args.dataset if hasattr(args, 'dataset') else None
+    metrics = trainer.train(
+        dataset_path=dataset_path,
+        num_samples=args.n_samples,
+        verbose=True
+    )
+
+    print("\nTraining Summary:")
+    print(f"  Time Model - Train R²: {metrics['time_model']['train_r2']:.4f}, Test R²: {metrics['time_model']['test_r2']:.4f}")
+    print(f"  Cost Model - Train R²: {metrics['cost_model']['train_r2']:.4f}, Test R²: {metrics['cost_model']['test_r2']:.4f}")
+    print(f"  Models saved to: {args.output}")
+
+
+def cmd_generate_data(args):
+    """Handle synthetic data generation."""
+    from .offline.data_generator import DataGenerator
+
+    print("=" * 60)
+    print("Generating Synthetic Dataset")
+    print("=" * 60)
+
+    generator = DataGenerator(seed=args.seed)
+
+    print(f"\nGenerating {args.n_samples} samples...")
+    dataset = generator.generate_dataset(
+        num_samples=args.n_samples,
+        graph_size_range=(args.graph_min, args.graph_max),
+        edge_prob_range=(args.edge_prob_min, args.edge_prob_max),
+    )
+
+    generator.save_dataset(dataset, args.output, save_graphs=args.save_graphs)
+
+    print(f"\nDataset generation complete:")
+    print(f"  Samples: {len(dataset)}")
+    print(f"  Output: {args.output}")
+
+
+def cmd_recommend(args):
+    """Handle configuration recommendation."""
+    from .online.recommender import Recommender
+    from .utils.graph_feature_extractor import GraphFeatureExtractor
+    from .utils.query_complexity_extractor import QueryComplexityExtractor
+
+    print("=" * 60)
+    print("Configuration Recommendation")
+    print("=" * 60)
+
+    # Initialize recommender
+    model_dir = args.model_dir if hasattr(args, 'model_dir') and args.model_dir else None
+    recommender = Recommender(model_dir=model_dir, auto_train=args.auto_train)
+
+    if not recommender.models_loaded and not args.auto_train:
+        print("\nWarning: No trained models found.")
+        print("Using heuristic-based recommendation.")
+        print("Run 'autoconfig train' first for better results.\n")
+
+    # Load graph features
+    print(f"Loading graph: {args.graph}")
+    graph_extractor = GraphFeatureExtractor()
+    graph_path = Path(args.graph)
+
+    if graph_path.is_file():
+        graph_features_dict = graph_extractor.extract_single(args.graph)
+        graph_features = graph_features_dict['graph_features']
+    elif graph_path.is_dir():
+        graph_features_dict = graph_extractor.extract_partitioned(args.graph)
+        graph_features = graph_features_dict['graph_features']
+    else:
+        print(f"Error: Graph path does not exist: {args.graph}")
+        sys.exit(1)
+
+    # Load query complexity from file
+    print(f"Loading query: {args.query}")
+    query_extractor = QueryComplexityExtractor()
     
-    # Show sample configurations
-    print("\nSample configurations:")
-    for i, config in enumerate(result['configurations'][:3]):
-        r = config['resource']
-        gpu_str = f", GPU={r.get('num_gpus', 0)}" if r.get('num_gpus', 0) > 0 else ""
-        print(f"  Config {i}: k={config['k']}, CPU={r.get('cpu_cores', '?')}, Mem={r.get('memory_gb', '?')}GB{gpu_str}")
+    try:
+        query_complexity = query_extractor.extract_from_file(args.query)
+        print(f"  Query complexity: {query_complexity}")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    # Get recommendations
+    print("\nRecommending configurations...")
+    result = recommender.recommend_with_complexity(
+        query_complexity=query_complexity,
+        graph_features=graph_features,
+        top_n=args.top_n
+    )
+
+    # Display results
+    print("\n" + "=" * 60)
+    print(f"Top {args.top_n} Diverse Recommendations:")
+    print("=" * 60)
+
+    for rec in result['recommendations']:
+        print(f"\n[Rank {rec['rank']}] {rec['config_id']}")
+        r = rec['resource']
+        print(f"  CPU: {r.get('cpu_cores', '?')} cores")
+        print(f"  Memory: {r.get('memory_gb', '?')} GB")
+        print(f"  GPU: {r.get('num_gpus', 0)}")
+        print(f"  Predicted Time: {rec['predicted_time_ms']:.2f} ms")
+        print(f"  Predicted Cost: {rec['predicted_cost']:.4f}")
+        if rec.get('is_perturbed'):
+            print(f"  * Refined via perturbation")
+
+    # Save results
+    if args.output:
+        recommender.save_recommendation(result, args.output)
+        print(f"\nResults saved to: {args.output}")
 
 
 def cmd_all(args):
     """Handle complete feature extraction pipeline."""
     from .utils.query_feature_extractor import QueryFeatureExtractor
     from .utils.graph_feature_extractor import GraphFeatureExtractor
-    from .utils.config_generator import (
-        ConfigGenerator,
-        generate_default_catalog,
-    )
-    
+    from .utils.config_generator import ConfigGenerator, generate_default_catalog
+
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     print("=" * 60)
     print("Complete Feature Extraction Pipeline")
     print("=" * 60)
-    
+
     # 1. Query features
     if args.query:
         print("\n[1/3] Extracting query features...")
         query_extractor = QueryFeatureExtractor()
         query_features = query_extractor.extract_from_file(args.query)
-        query_features['metadata'] = {'input_file': args.query}
         query_output = output_dir / 'query_features.yaml'
         query_extractor.save_to_yaml(query_features, str(query_output))
         print(f"  Query features: {query_features['feature_count']['total']} features")
-        print(f"  Output: {query_output}")
     else:
-        print("\n[1/3] Skipping query features (no input)")
-    
+        print("\n[1/3] Skipping query features")
+
     # 2. Graph features
     if args.graph:
         print("\n[2/3] Extracting graph features...")
         graph_extractor = GraphFeatureExtractor()
         graph_path = Path(args.graph)
-        
+
         if graph_path.is_file():
             graph_features = graph_extractor.extract_single(args.graph)
         else:
             graph_features = graph_extractor.extract_partitioned(args.graph)
-        
+
         graph_output = output_dir / 'graph_features.yaml'
         graph_extractor.save_to_yaml(graph_features, str(graph_output))
-        
+
         gf = graph_features['graph_features']
         print(f"  Graph: {gf['basic']['num_vertices']} vertices, {gf['basic']['num_edges']} edges")
-        print(f"  Partitions: {gf['partition']['num_partitions']}")
-        print(f"  Output: {graph_output}")
     else:
-        print("\n[2/3] Skipping graph features (no input)")
-    
+        print("\n[2/3] Skipping graph features")
+
     # 3. Configuration features
     print("\n[3/3] Generating configurations...")
     catalog = generate_default_catalog()
     generator = ConfigGenerator(catalog)
-    k_range = (args.k_min, args.k_max)
-    
-    result = generator.generate(args.config_n, k_range)
+    result = generator.generate(args.config_n, (args.k_min, args.k_max))
     config_output = output_dir / 'config_features.yaml'
     generator.save_to_yaml(result, str(config_output))
-    
     print(f"  Configurations: {len(result['configurations'])} samples")
-    print(f"  Output: {config_output}")
-    
+
     print("\n" + "=" * 60)
     print("Feature extraction complete!")
     print(f"Output directory: {output_dir}")
-    print("=" * 60)
 
 
 def cmd_merge(args):
     """Handle feature merging."""
     from .utils.feature_merger import FeatureMerger
-    
+
     merger = FeatureMerger()
     result = merger.merge_all(args.query, args.graph, args.config)
     merger.save_to_yaml(result, args.output)
-    
+
     print(f"Features merged successfully:")
-    print(f"  Query: {args.query}")
-    print(f"  Graph: {args.graph}")
-    print(f"  Config: {args.config}")
     print(f"  Output: {args.output}")
     print(f"  Feature matrix: {result['metadata']['num_samples']} samples × {result['metadata']['num_features']} features")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='AutoConfig - Feature Extraction Tools',
+        description='AutoConfig - Graph Query Configuration System',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Extract query features
+  # Feature extraction
   autoconfig query --input query.py --output out/query.yaml
+  autoconfig graph --input graph.csv --output out/graph.yaml
+  autoconfig config --num-samples 20 --output out/configs.yaml
 
-  # Extract graph features (single graph)
-  autoconfig graph --input data/edges.csv --output out/graph.yaml
+  # Training
+  autoconfig train --n-samples 500 --output data/models/
+  autoconfig generate-data --n-samples 200 --output data/generated/
 
-  # Extract graph features (partitioned graph)
-  autoconfig graph --input data/partitions/ --output out/graph.yaml
-
-  # Generate configurations
-  autoconfig config --num-samples 20 --output out/configs.yaml --use-default-catalog
-
-  # Complete pipeline
-  autoconfig all --query query.py --graph data/ --config-n 20 --output out/
+  # Recommendation
+  autoconfig recommend --query bfs --graph data/graph.csv --top-n 3
         """
     )
-    
+
     subparsers = parser.add_subparsers(dest='command', help='Commands')
-    
+
     # Query command
     query_parser = subparsers.add_parser('query', help='Extract query code features')
     query_parser.add_argument('--input', '-i', required=True, help='Input query source file')
     query_parser.add_argument('--output', '-o', default='out/query_features.yaml', help='Output YAML file')
     query_parser.set_defaults(func=cmd_query)
-    
+
     # Graph command
     graph_parser = subparsers.add_parser('graph', help='Extract graph data features')
     graph_parser.add_argument('--input', '-i', required=True, help='Input edge list file or folder')
     graph_parser.add_argument('--output', '-o', default='out/graph_features.yaml', help='Output YAML file')
     graph_parser.set_defaults(func=cmd_graph)
-    
+
     # Config command
     config_parser = subparsers.add_parser('config', help='Generate configurations using LHS')
-    config_parser.add_argument('--resource-catalog', '-c', help='Resource catalog YAML file')
-    config_parser.add_argument('--capacity', help='System capacity YAML file (capacity-constrained generation)')
     config_parser.add_argument('--num-samples', '-n', type=int, default=20, help='Number of samples')
     config_parser.add_argument('--k-min', type=int, default=1, help='Min instances')
-    config_parser.add_argument('--k-max', type=int, default=None, help='Max instances (default: capacity-limited)')
+    config_parser.add_argument('--k-max', type=int, default=16, help='Max instances')
     config_parser.add_argument('--output', '-o', default='out/config_features.yaml', help='Output YAML file')
-    config_parser.add_argument('--use-default-catalog', action='store_true', help='Use default catalog')
-    # Simple catalog parameters
-    config_parser.add_argument('--cpu', type=int, default=None, help='CPU cores')
-    config_parser.add_argument('--memory', type=int, default=None, help='Memory in GB')
-    config_parser.add_argument('--gpu', type=int, default=0, help='Number of GPUs')
-    config_parser.add_argument('--gpu-memory', type=int, default=0, help='GPU memory in GB')
-    config_parser.add_argument('--storage', type=int, default=None, help='Storage in GB')
     config_parser.set_defaults(func=cmd_config)
-    
+
+    # Train command
+    train_parser = subparsers.add_parser('train', help='Train Bayesian models')
+    train_parser.add_argument('--n-samples', type=int, default=500, help='Number of training samples')
+    train_parser.add_argument('--dataset', type=str, default=None, help='Existing dataset path')
+    train_parser.add_argument('--output', '-o', default='data/models/', help='Output directory for models')
+    train_parser.set_defaults(func=cmd_train)
+
+    # Generate data command
+    gen_parser = subparsers.add_parser('generate-data', help='Generate synthetic training data')
+    gen_parser.add_argument('--n-samples', type=int, default=200, help='Number of samples')
+    gen_parser.add_argument('--graph-min', type=int, default=100, help='Min graph vertices')
+    gen_parser.add_argument('--graph-max', type=int, default=5000, help='Max graph vertices')
+    gen_parser.add_argument('--edge-prob-min', type=float, default=0.001, help='Min edge probability')
+    gen_parser.add_argument('--edge-prob-max', type=float, default=0.05, help='Max edge probability')
+    gen_parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    gen_parser.add_argument('--save-graphs', action='store_true', help='Save graphs as edge lists')
+    gen_parser.add_argument('--output', '-o', default='data/generated/', help='Output directory')
+    gen_parser.set_defaults(func=cmd_generate_data)
+
+    # Recommend command
+    rec_parser = subparsers.add_parser('recommend', help='Recommend optimal configuration')
+    rec_parser.add_argument('--query', '-q', required=True,
+                           help='Query source file (.cu, .cpp, .py)')
+    rec_parser.add_argument('--graph', '-g', required=True, help='Graph file or directory')
+    rec_parser.add_argument('--top-n', type=int, default=3, help='Number of recommendations')
+    rec_parser.add_argument('--model-dir', '-m', default=None, help='Model directory')
+    rec_parser.add_argument('--auto-train', action='store_true', help='Auto-train if no models')
+    rec_parser.add_argument('--output', '-o', default=None, help='Save results to YAML')
+    rec_parser.set_defaults(func=cmd_recommend)
+
     # All command
     all_parser = subparsers.add_parser('all', help='Complete feature extraction pipeline')
     all_parser.add_argument('--query', '-q', help='Query source file')
@@ -313,21 +367,21 @@ Examples:
     all_parser.add_argument('--k-max', type=int, default=16, help='Max instances')
     all_parser.add_argument('--output', '-o', default='out/', help='Output directory')
     all_parser.set_defaults(func=cmd_all)
-    
+
     # Merge command
-    merge_parser = subparsers.add_parser('merge', help='Merge query, graph, and config features')
+    merge_parser = subparsers.add_parser('merge', help='Merge features')
     merge_parser.add_argument('--query', '-q', required=True, help='Query features YAML')
     merge_parser.add_argument('--graph', '-g', required=True, help='Graph features YAML')
     merge_parser.add_argument('--config', '-c', required=True, help='Config features YAML')
-    merge_parser.add_argument('--output', '-o', default='out/merged_features.yaml', help='Output merged YAML')
+    merge_parser.add_argument('--output', '-o', default='out/merged_features.yaml', help='Output YAML')
     merge_parser.set_defaults(func=cmd_merge)
-    
+
     args = parser.parse_args()
-    
+
     if args.command is None:
         parser.print_help()
         sys.exit(0)
-    
+
     args.func(args)
 
 
