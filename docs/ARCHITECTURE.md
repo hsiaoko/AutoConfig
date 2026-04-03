@@ -200,9 +200,9 @@ python -m autoconfig train --n-samples 500 --output data/models/
 ### 推荐流程
 
 ```bash
-# 推荐最优配置
-python -m autoconfig recommend \
-    --query bfs \
+# 推荐最优配置（使用查询源代码文件）
+autoconfig recommend \
+    --query my_algorithm.cu \
     --graph data/graph.csv \
     --top-n 3 \
     --output out/recommendation.yaml
@@ -222,6 +222,7 @@ result = recommender.what_if(
 
 ```python
 from autoconfig import DataGenerator, Trainer, Recommender
+from autoconfig.utils import QueryComplexityExtractor
 
 # 1. 生成数据
 generator = DataGenerator(seed=42)
@@ -236,8 +237,13 @@ print(f"Cost model R²: {metrics['cost_model']['test_r2']}")
 
 # 3. 推荐配置
 recommender = Recommender(model_dir='data/models/')
-result = recommender.recommend(
-    query_name='pagerank',
+
+# 方式 1: 从文件提取查询复杂度
+extractor = QueryComplexityExtractor()
+query_complexity = extractor.extract_from_file('my_query.cu')
+
+result = recommender.recommend_with_complexity(
+    query_complexity=query_complexity,
     graph_features={
         'num_vertices': 10000,
         'num_edges': 50000,
@@ -248,6 +254,14 @@ result = recommender.recommend(
     },
     top_n=3
 )
+
+# 方式 2: 使用预定义查询名（向后兼容）
+result = recommender.recommend(
+    query_name='pagerank',
+    graph_features={...},
+    top_n=3
+)
+
 print(f"Best config: {result['best_config']}")
 ```
 
@@ -357,8 +371,8 @@ autoconfig config --num-samples 20 --output out/configs.yaml
 autoconfig train --n-samples 500 --output data/models/
 autoconfig generate-data --n-samples 200 --output data/generated/
 
-# 推荐
-autoconfig recommend --query bfs --graph data/graph.csv --top-n 3
+# 推荐（使用查询源代码文件）
+autoconfig recommend --query my_algorithm.cu --graph data/graph.csv --top-n 3
 ```
 
 ## API 参考

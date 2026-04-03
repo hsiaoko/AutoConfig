@@ -47,15 +47,22 @@ autoconfig generate-data --n-samples 200 --output data/generated/
 ### 步骤 3: 推荐配置
 
 ```bash
-# 使用 CLI 推荐
+# 使用 CLI 推荐（使用查询源代码文件）
 autoconfig recommend \
-    --query bfs \
+    --query my_query.cu \
     --graph data/graph.csv \
     --top-n 3 \
     --output out/recommendation.yaml
 ```
 
-支持的查询类型：`bfs`, `dfs`, `pagerank`, `cc`, `sssp`, `kcore`, `tc`
+**支持的查询文件格式**：`.cu`, `.cpp`, `.py` 等
+
+系统会自动分析代码中的：
+- 顶点扫描 (`v_scan`)
+- 边扫描 (`e_scan`)
+- 前沿迭代 (`f_scan`)
+- 原子操作 (`atomic`)
+- 同步屏障 (`sync`)
 
 ### Python API 完整示例
 
@@ -137,15 +144,15 @@ autoconfig generate-data \
 ### 推荐
 
 ```bash
-# 推荐最优配置
+# 推荐最优配置（使用查询源代码文件）
 autoconfig recommend \
-    --query bfs \
+    --query my_algorithm.cu \
     --graph data/graph.csv \
     --top-n 3
 
 # 使用特定模型目录
 autoconfig recommend \
-    --query pagerank \
+    --query kernel.cu \
     --graph data/graph.csv \
     --model-dir data/models/ \
     --output out/result.yaml
@@ -197,10 +204,22 @@ print(f"Cost model R²: {metrics['cost_model']['test_r2']}")
 
 ```python
 from autoconfig import Recommender
+from autoconfig.utils import QueryComplexityExtractor
+
+# 从文件提取查询复杂度
+extractor = QueryComplexityExtractor()
+query_complexity = extractor.extract_from_file('my_query.cu')
 
 recommender = Recommender(model_dir='data/models/')
 
-# 推荐
+# 推荐（使用查询复杂度）
+result = recommender.recommend_with_complexity(
+    query_complexity=query_complexity,
+    graph_features=graph_features,
+    top_n=3
+)
+
+# 推荐（使用预定义查询名，向后兼容）
 result = recommender.recommend('bfs', graph_features, top_n=3)
 
 # What-if 分析
@@ -261,31 +280,34 @@ Models saved to: data/models/
 
 ```
 ============================================================
-Top 3 Recommendations for 'bfs':
+Top 3 Diverse Recommendations:
 ============================================================
 
-[Rank 1] config_2_pert_-1
-  CPU: 12 cores
-  Memory: 64 GB
-  GPU: 1
-  Predicted Time: 45.23 ms
-  Predicted Cost: 12.5000
+[Rank 1] default_5_pert_+2
+  CPU: 136 cores
+  Memory: 512 GB
+  GPU: 8
+  Predicted Time: 0.46 ms
+  Predicted Cost: 0.5425
   * Refined via perturbation
 
-[Rank 2] config_1
-  CPU: 8 cores
-  Memory: 32 GB
-  GPU: 0
-  Predicted Time: 67.89 ms
-  Predicted Cost: 13.2000
+[Rank 2] default_5_pert_+1
+  CPU: 132 cores
+  Memory: 512 GB
+  GPU: 8
+  Predicted Time: 0.46 ms
+  Predicted Cost: 0.5449
+  * Refined via perturbation
 
-[Rank 3] config_3
-  CPU: 32 cores
-  Memory: 128 GB
-  GPU: 2
-  Predicted Time: 23.45 ms
-  Predicted Cost: 15.8000
+[Rank 3] default_5
+  CPU: 128 cores
+  Memory: 512 GB
+  GPU: 8
+  Predicted Time: 0.47 ms
+  Predicted Cost: 0.5473
 ```
+
+**注意**：Top-3 是**3 个不同的资源配置**，按预测成本从低到高排序。
 
 ## 故障排除
 

@@ -271,17 +271,54 @@ configurations:
 ## 训练预测模型
 
 ```bash
-# 使用提取的特征训练贝叶斯模型
-autoconfig-train --n-train 100 --n-test 20
+# 训练贝叶斯模型（时间和成本预测）
+autoconfig train --n-samples 500 --output data/models/
 ```
 
 或使用 Python API：
 
 ```python
-from autoconfig import CostPredictor
+from autoconfig import Trainer
 
-predictor = CostPredictor()
-predictor.train(queries, graphs, configs, times)
+trainer = Trainer('data/models/')
+metrics = trainer.train(num_samples=500)
+print(f"R² scores: time={metrics['time_model']['test_r2']:.4f}, cost={metrics['cost_model']['test_r2']:.4f}")
+```
+
+---
+
+## 配置推荐
+
+```bash
+# 从查询源代码文件推荐最优配置
+autoconfig recommend \
+    --query my_algorithm.cu \
+    --graph data/graph.csv \
+    --top-n 3 \
+    --output out/recommendation.yaml
+```
+
+系统会：
+1. 自动分析代码复杂度（v_scan, e_scan, f_scan, atomic, sync）
+2. 提取图特征
+3. 使用训练好的模型预测执行时间和成本
+4. 返回 Top-3 个**不同的**最优配置（按成本排序）
+
+**输出示例**：
+```
+Top 3 Diverse Recommendations:
+
+[Rank 1] default_5_pert_+2
+  CPU: 136 cores, Memory: 512 GB, GPU: 8
+  Predicted Time: 0.46 ms, Cost: 0.5425
+
+[Rank 2] default_5_pert_+1
+  CPU: 132 cores, Memory: 512 GB, GPU: 8
+  Predicted Time: 0.46 ms, Cost: 0.5449
+
+[Rank 3] default_5
+  CPU: 128 cores, Memory: 512 GB, GPU: 8
+  Predicted Time: 0.47 ms, Cost: 0.5473
 ```
 
 ---
