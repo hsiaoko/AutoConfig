@@ -1,12 +1,12 @@
-# AutoConfig — 图查询执行时间预测
+# AutoConfig — Graph query execution time prediction
 
-基于特征抽取与机器学习的图查询执行时间 / 成本估计，支持论文中的 **静态特征**、**符号模板（公式）**、**图与划分统计**、**系统配置** 四元组流水线。
+Feature extraction and machine learning for estimating graph query **runtime and cost**, using a four-stage pipeline: **static features**, **symbolic templates (formulas)**, **graph and partition statistics**, and **system configuration** (as in the paper).
 
 ---
 
-## 安装
+## Installation
 
-在仓库根目录（含 `pyproject.toml` / `requirements.txt`）执行：
+At the repository root (where `pyproject.toml` / `requirements.txt` live):
 
 ```bash
 cd AutoConfig
@@ -16,24 +16,24 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-安装完成后可使用命令行入口 `autoconfig`，或直接用 `python experiments/scripts/step*.py` 跑四步流水线。
+Then use the `autoconfig` CLI, or run the four pipeline steps with `python experiments/scripts/step*.py`.
 
 ---
 
-## 特征流水线（四步 YAML）
+## Feature pipeline (four YAML stages)
 
-与论文 §5 一致：**查询 YAML**（静态为数值、符号为模板与公式）→ **图 YAML** → **系统配置 YAML** → **合并为最终数值特征矩阵**。
+Aligned with the paper (§5): **query YAML** (numeric static + symbolic templates) → **graph YAML** → **system config YAML** → **merged numeric feature matrix**.
 
-| 步骤 | 作用 | 输出文件 |
-|------|------|----------|
-| 1 | 从查询源码抽取 `Φ_static` 与符号模板 `Φ_sym`（`format_version: 2`，含公式，不含图上的最终系数） | `query_features.yaml` |
-| 2 | 从边列表（或分片目录）计算图与划分统计 | `graph_features.yaml` |
-| 3 | LHS 等资源采样生成候选配置 | `config_features.yaml` |
-| 4 | 用图统计**实例化**符号模板，并与静态 / 图 / 配置拼成向量 | `merged_features.yaml` |
+| Step | Role | Output file |
+|------|------|-------------|
+| 1 | Extract `Φ_static` and symbolic templates `Φ_sym` from query source (`format_version: 2`, formulas; not final graph coefficients) | `query_features.yaml` |
+| 2 | Graph and partition stats from an edge list (or shard directory) | `graph_features.yaml` |
+| 3 | LHS (etc.) sampling of candidate configs | `config_features.yaml` |
+| 4 | **Instantiate** symbolic templates with graph stats; concatenate static / graph / config | `merged_features.yaml` |
 
-### 方式 A：四段独立脚本（推荐对照论文）
+### Option A: Four standalone scripts (best for following the paper)
 
-在仓库根目录执行：
+From the repo root:
 
 ```bash
 python experiments/scripts/step1_query_features.py \
@@ -52,71 +52,74 @@ python experiments/scripts/step4_merge_features.py \
   -o out/merged_features.yaml
 ```
 
-### 方式 B：`autoconfig` 子命令
+### Option B: `autoconfig` subcommands
 
 ```bash
-autoconfig query  --input data/queries/gar_match.cu --output out/query_features.yaml
+autoconfig query  --input data/queries/kernel_bfs.cu --output out/query_features.yaml
 autoconfig graph  --input data/edges.csv --output out/graph_features.yaml
-autoconfig config --num-samples 20 --output out/config_features.yaml --use-default-catalog
+autoconfig config --num-samples 20 --output out/config_features.yaml
 autoconfig merge   --query out/query_features.yaml --graph out/graph_features.yaml \
                    --config out/config_features.yaml --output out/merged_features.yaml
 ```
 
-一键生成前三类产物（不含第四步合并）：
+Generate the first three artifacts in one shot (merge is separate):
 
 ```bash
 autoconfig all --query query.cu --graph data/ --config-n 20 --output out/
 ```
 
----
-
-## 符号特征说明
-
-- **Step 1 的 YAML** 中，`symbolic` 为 **模板层**：每个模式（VScan、EScan、FScan、RExp、Atom、Comm）包含 `template`、`formula`、`detected` 以及所需图/划分字段说明，**不是**最终 `|V|`、`|E|` 等标量。
-- **Step 4** 读取 `graph_features.yaml`，由 `FeatureMerger` 将模板实例化为 **12 维** 数值特征（`sym_*_coeff` / `sym_*_requires`），供下游 MLP 使用。
-- 若仍使用旧版「扁平 `sym_*` 占位」查询 YAML，合并器仍兼容。
-
-详细公式与字段表见 **[docs/feature_extraction.md](docs/feature_extraction.md)**，四步说明见 **[docs/FEATURE_PIPELINE.md](docs/FEATURE_PIPELINE.md)**。
+For richer config generation (`--use-default-catalog`, `--resource-catalog`, `--cpu` / `--memory`, etc.), use `python experiments/scripts/step3_system_config.py --help`.
 
 ---
 
-## 文档索引
+## Symbolic features
 
-| 文档 | 说明 |
-|------|------|
-| [docs/README.md](docs/README.md) | 文档导航 |
-| [docs/FEATURE_PIPELINE.md](docs/FEATURE_PIPELINE.md) | 四步流水线（英文） |
-| [docs/feature_extraction.md](docs/feature_extraction.md) | 特征定义与合并后维度 |
-| [docs/USAGE_GUIDE_CN.md](docs/USAGE_GUIDE_CN.md) | 中文使用指南 |
-| [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) | CLI 详解 |
-| [docs/api_reference.md](docs/api_reference.md) | API 参考 |
+- In **step 1** YAML, `symbolic` is the **template layer**: each pattern (VScan, EScan, FScan, RExp, Atom, Comm) includes `template`, `formula`, `detected`, and required graph/partition fields—not final scalars such as `|V|`, `|E|`.
+- **Step 4** reads `graph_features.yaml`; `FeatureMerger` turns templates into **12** numeric features (`sym_*_coeff` / `sym_*_requires`) for downstream models.
+- Legacy flat `sym_*` placeholders in query YAML are still supported.
+
+Formulas and field tables: **[docs/feature_extraction.md](docs/feature_extraction.md)**. Pipeline details: **[docs/FEATURE_PIPELINE.md](docs/FEATURE_PIPELINE.md)**.
 
 ---
 
-## 功能概览
+## Documentation index
 
-### 查询特征
-
-- **静态**：循环深度、分支、变量、递归、原子操作、同步、显式并行等。
-- **符号**：六种 workload 模板 + 公式字符串；在 merge 阶段用图统计求值。
-
-### 图特征
-
-支持单边列表 CSV 或 **分片目录**（多文件），输出顶点/边数、度分布、直径、聚类系数、划分与边界等（见 `graph_features.yaml` 结构）。
-
-### 配置生成
-
-对资源目录做 Latin Hypercube 采样，得到 `(k, resource)` 候选集合，写入 `config_features.yaml`。
+| Document | Description |
+|----------|-------------|
+| [docs/README.md](docs/README.md) | Documentation index |
+| [docs/FEATURE_PIPELINE.md](docs/FEATURE_PIPELINE.md) | Four-step YAML pipeline |
+| [docs/feature_extraction.md](docs/feature_extraction.md) | Feature definitions and merged layout |
+| [docs/usage_guide.md](docs/usage_guide.md) | Usage guide (Python API and workflow) |
+| [docs/CONFIG_GUIDE.md](docs/CONFIG_GUIDE.md) | Configuration and resource catalog |
+| [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) | CLI reference |
+| [docs/api_reference.md](docs/api_reference.md) | API reference |
 
 ---
 
-## 项目结构（节选）
+## Capabilities
+
+### Query features
+
+- **Static**: loop depth, branches, variables, recursion, atomics, sync, explicit parallelism, etc.
+- **Symbolic**: six workload templates + formula strings; evaluated at merge time using graph stats.
+
+### Graph features
+
+Single edge-list CSV or **partition directory** (multiple files): vertices/edges, degree distribution, diameter, clustering, partition and boundary metrics (see `graph_features.yaml`).
+
+### Configuration generation
+
+Latin Hypercube sampling over a resource catalog yields `(k, resource)` candidates in `config_features.yaml`.
+
+---
+
+## Project layout (excerpt)
 
 ```
 AutoConfig/
-├── autoconfig/                 # 主包
+├── autoconfig/
 │   ├── cli.py
-│   ├── feature_extractor/      # static / symbolic / graph_partition
+│   ├── feature_extractor/
 │   └── utils/
 │       ├── query_feature_extractor.py
 │       ├── graph_feature_extractor.py
@@ -128,7 +131,7 @@ AutoConfig/
 │       ├── step2_graph_features.py
 │       ├── step3_system_config.py
 │       └── step4_merge_features.py
-├── docs/                       # 说明文档
+├── docs/
 ├── requirements.txt
 ├── pyproject.toml
 └── README.md
@@ -136,7 +139,7 @@ AutoConfig/
 
 ---
 
-## 训练与推荐（简述）
+## Training and recommendation (brief)
 
 ```bash
 autoconfig train --n-samples 500 --output data/models/
@@ -146,16 +149,16 @@ autoconfig train --n-samples 500 --output data/models/
 autoconfig recommend --query my_algorithm.cu --graph data/graph.csv --top-n 3 --output out/recommendation.yaml
 ```
 
-更多参数与实验脚本见 [experiments/README.md](experiments/README.md)。
+More options and experiment scripts: [experiments/README.md](experiments/README.md).
 
 ---
 
-## 多 Agent 开发系统（可选）
+## Multi-agent development harness (optional)
 
-参见 [dev_harness/README.md](dev_harness/README.md)、[dev_harness/QUICKSTART.md](dev_harness/QUICKSTART.md)。
+See [dev_harness/QUICKSTART.md](dev_harness/QUICKSTART.md).
 
 ---
 
-## 许可证
+## License
 
 MIT License
