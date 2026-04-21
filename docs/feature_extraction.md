@@ -1,16 +1,31 @@
 # Feature Extraction Methods
 
-This document describes the three-stage feature extraction pipeline for graph query execution time prediction.
+This document describes the stage-wise feature abstraction for graph query execution time prediction (paper §5): static code analysis, symbolic workload templates, graph-aware instantiation, and configuration encoding.
 
 ## Overview
 
-Our approach extracts features from three sources:
+Features come from three conceptual sources, materialized as **YAML files** and combined in a merge step:
 
-1. **Query Code** - Static and symbolic features from the query program
-2. **Graph Data** - Structural and partition statistics from the input graph
-3. **System Configuration** - Resource allocation parameters
+1. **Query code** — `Φ_static` (numeric) and `Φ_sym` (templates / formulas; not numeric until instantiation).
+2. **Graph data** — `Φ_graph`: statistics from an edge list (and optional partition layout).
+3. **System configuration** — `Φ_conf`: candidate resource settings (e.g. LHS-sampled).
 
-The feature extraction is based on the method described in the research paper for Hybrid graph query tasks.
+The **merge** step evaluates symbolic templates using graph/partition statistics so the model sees a single numeric vector per `(query, graph, configuration)` sample.
+
+For a runnable four-command workflow, see [FEATURE_PIPELINE.md](FEATURE_PIPELINE.md).
+
+---
+
+## Four-step YAML pipeline (recommended)
+
+| Step | Role | Output | Module / script |
+|------|------|--------|-----------------|
+| 1 | Query analysis | `query_features.yaml` | `experiments/scripts/step1_query_features.py` or `autoconfig query` |
+| 2 | Graph statistics | `graph_features.yaml` | `experiments/scripts/step2_graph_features.py` or `autoconfig graph` |
+| 3 | Config candidates | `config_features.yaml` | `experiments/scripts/step3_system_config.py` or `autoconfig config` |
+| 4 | Merge & instantiate | `merged_features.yaml` | `experiments/scripts/step4_merge_features.py` or `autoconfig merge` |
+
+Step 1 writes **symbolic features as template metadata** (`format_version: 2`). Step 4 produces the **12 numeric symbolic slots** (`sym_*_coeff`, `sym_*_requires`) used by the MLP alongside static, graph, and config features.
 
 ---
 
@@ -55,73 +70,49 @@ query_features:
     static_explicit_parallel_flag: 0.0
 ```
 
-### Symbolic Features (12 features)
+### Symbolic features (templates in YAML → 12 numeric slots after merge)
 
-Symbolic workload templates that capture dominant computation, communication, and synchronization patterns. These are partial functions instantiated with graph/partition statistics.
+Symbolic workload templates capture dominant computation, communication, and synchronization patterns. In **query YAML**, they are stored as **partial functions**: template name, human-readable formula, detection flag, and required statistics—not as final coefficients.
 
-**Supported Patterns:** Python, C/C++, CUDA, Pseudo-code
+**Supported patterns:** Python, C/C++, CUDA, pseudo-code (regex/LLM-assisted).
 
-| # | Template | Code Pattern | Instantiation | Requires |
-|---|----------|--------------|---------------|----------|
-| 1 | **VScan**(V, n) | Vertex scans, `g.n_vertices`, CUDA vertex loops | \|V\| or \|V\|/n | \|V\| |
-| 2 | **EScan**(E, n) | Edge scans, `g.n_edges`, `g.e_src`, CUDA edge loops | \|E\| or \|E\|/n | \|E\| |
-| 3 | **FScan**(G, n) | Worklist loops, `curr_count > 0`, frontier expansion | ∑_{t=1}^{D} \|E_t\| | D (diameter) |
-| 4 | **RExp**(G) | Recursive expansion, `GARExpand`, `ExpandEmbeddings` | ∏_{i=1}^{D} E[deg(v_i)] | D, avg_degree |
-| 5 | **Atom**(G) | Atomic updates, `atomicAdd`, `atomicCAS` | \|E\| × skew(G) | \|E\|, skew |
-| 6 | **Comm**(G, F) | Cross-partition, `SendTo`, `IsMirror` | ∑_{v ∈ V_∂} deg_∂(v) | boundary-degree stats |
+| # | Template | Code pattern | Formula (conceptual) | Graph / partition stats |
+|---|----------|--------------|----------------------|-------------------------|
+| 1 | **VScan**(V, n) | Vertex scans, `g.n_vertices`, CUDA vertex loops | \|V\|/n (n = partition count used as scale) | `num_vertices`, partitions |
+| 2 | **EScan**(E, n) | Edge scans, neighbors, `g.n_edges` | \|E\|/n | `num_edges`, partitions |
+| 3 | **FScan**(G, n) | Worklist / frontier loops | ∑_{t=1}^{D} \|E_t\| (implemented as \|E\| approximation) | `num_edges`, `diameter` |
+| 4 | **RExp**(G) | Recursive expansion | ∏ E[deg] ≈ avg_degree^D (D capped) | `avg_degree`, `diameter` |
+| 5 | **Atom**(G) | `atomicAdd`, CAS | \|E\| × skew | `num_edges`, `skew` |
+| 6 | **Comm**(G, F) | `SendTo`, mirrors | boundary degree sum | `boundary_degree_sum` |
 
-**C++/CUDA Pattern Recognition:**
-- Vertex scanning: `for(uint32_t v=tid; v<g.n_vertices; v+=step)`, `g.n_vertices`
-- Edge scanning: `for(int ge=tid; ge<params.n_edges; ge+=step)`, `g.e_src[ge]`
-- Frontier iteration: `while(!worklist.empty())`, `curr_count > 0`, `next_count`
-- Recursive expansion: `GARExpandEmbeddingsKernel`, `Expand(m, level+1)`
-- Atomic updates: `atomicAdd(params.cand_count, 1)`
-- Cross-partition: `SendTo()`, `IsMirror()`, `Owner()`
+**Query YAML shape (`format_version: 2`):**
 
-**Example Output (Python BFS):**
-```yaml
-query_features:
-  symbolic:
-    sym_vscan_coeff: 0.0
-    sym_vscan_requires: 0.0
-    sym_escan_coeff: 50000.0      # |E| edges
-    sym_escan_requires: 1.0
-    sym_fscan_coeff: 50000.0      # D × |E|/D
-    sym_fscan_requires: 1.0
-    sym_rexp_coeff: 0.0
-    sym_rexp_requires: 0.0
-    sym_atom_coeff: 0.0
-    sym_atom_requires: 0.0
-    sym_comm_coeff: 0.0
-    sym_comm_requires: 0.0
-```
-
-**Example Output (C++/CUDA GAR Match):**
 ```yaml
 query_features:
   static:
-    static_loop_count: 8.0           # Multiple CUDA kernel loops
-    static_max_loop_depth: 2.0       # Nested parallel loops
-    static_branch_count: 16.0        # Many conditional checks
-    static_variable_count: 53.0      # Many device buffers and parameters
-    static_recursion_count: 0.0
-    static_atomic_op_count: 4.0      # atomicAdd for candidate counting
-    static_sync_count: 7.0           # cudaDeviceSynchronize calls
-    static_explicit_parallel_flag: 1.0  # CUDA kernel launches
+    static_loop_count: 2.0
+    # ... other static_* scalars
   symbolic:
-    sym_vscan_coeff: 1000.0          # |V| vertex processing
-    sym_vscan_requires: 1.0
-    sym_escan_coeff: 5000.0          # |E| edge processing
-    sym_escan_requires: 1.0
-    sym_fscan_coeff: 0.0
-    sym_fscan_requires: 0.0
-    sym_rexp_coeff: 0.0
-    sym_rexp_requires: 0.0
-    sym_atom_coeff: 10000.0          # |E| × skew for atomic updates
-    sym_atom_requires: 1.0
-    sym_comm_coeff: 0.0
-    sym_comm_requires: 0.0
+    format_version: 2
+    families:
+      vscan:
+        template: "VScan(V, n)"
+        formula: "|V| / n"
+        detected: true
+        requires_graph: ["num_vertices"]
+        requires_partition: []
+      escan:
+        template: "EScan(E, n)"
+        formula: "|E| / n"
+        detected: true
+        requires_graph: ["num_edges"]
+        requires_partition: []
+      # fscan, rexp, atom, comm: same structure
 ```
+
+**After merge** (`FeatureMerger`), symbolic templates become the **12 legacy numeric features** (six pairs `sym_*_coeff`, `sym_*_requires`) for compatibility with the MLP. A **legacy** query YAML that already contains flat `sym_*` floats is still accepted.
+
+**C++/CUDA pattern hints:** vertex loops (`g.n_vertices`), edge loops (`n_edges`, `e_src`), worklists, recursion (`Expand`, `GARExpand`), atomics, `SendTo` / `IsMirror`.
 
 ---
 
@@ -328,34 +319,31 @@ catalog_stats:
 
 ---
 
-## Combined Feature Vector
+## Combined feature vector
 
-The complete feature vector combines all features:
+After the merge step, the model input is a flat numeric vector:
 
 ```
-Φ(Q, G, C) = [Φ_static(Q), Φ_sym(Q, G), Φ_graph(G), Φ_config(C)]
+Φ(Q, G, C) = [Φ_static(Q), Φ_sym instantiated(Q,G), Φ_graph(G), Φ_config(C)]
 ```
 
-**Dimensions:**
+**Dimensions (merged):**
 - Static: 8
-- Symbolic: 12
+- Symbolic (instantiated): 12
 - Graph/Partition: 17
 - Configuration: 10
 - **Total: 47**
 
 ---
 
-## Usage Examples
+## Usage examples
 
-### Extract Query Features
+### Extract query features
 
 ```bash
 autoconfig query \
     --input queries/bfs.py \
-    --output out/query_features.yaml \
-    --num-vertices 10000 \
-    --num-edges 50000 \
-    --diameter 6
+    --output out/query_features.yaml
 ```
 
 ### Extract Graph Features
@@ -383,7 +371,17 @@ autoconfig config \
     --k-max 16
 ```
 
-### Complete Pipeline
+### Four scripts (from repository root)
+
+```bash
+python experiments/scripts/step1_query_features.py -i queries/bfs.py -o out/query_features.yaml
+python experiments/scripts/step2_graph_features.py -i data/twitter_edges.csv -o out/graph_features.yaml
+python experiments/scripts/step3_system_config.py -n 20 -o out/config_features.yaml --use-default-catalog
+python experiments/scripts/step4_merge_features.py \
+  -q out/query_features.yaml -g out/graph_features.yaml -c out/config_features.yaml -o out/merged_features.yaml
+```
+
+### All-in-one CLI
 
 ```bash
 autoconfig all \

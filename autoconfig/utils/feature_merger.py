@@ -91,55 +91,142 @@ class FeatureMerger:
         with open(filepath, 'r', encoding='utf-8') as f:
             # Use unsafe loader to handle numpy types
             return yaml.unsafe_load(f)
-    
+
+    def graph_stats_for_symbolic_instantiation(
+        self,
+        graph_data: Dict[str, Any],
+    ) -> Dict[str, float]:
+        """
+        Map graph_features YAML to the statistic names used in symbolic templates.
+
+        Uses partition count as n in VScan/EScan when present (|V|/n, |E|/n).
+        """
+        gf = graph_data.get('graph_features', {})
+        npart = max(1, int(gf.get('partition', {}).get('num_partitions', 1)))
+        diam = int(gf.get('structure', {}).get('diameter', 0))
+        if diam <= 0:
+            diam = 1
+        skew = float(gf.get('degree', {}).get('skew', 1.0))
+        if skew == 0.0:
+            skew = 1.0
+        return {
+            'num_vertices': float(gf.get('basic', {}).get('num_vertices', 0)),
+            'num_edges': float(gf.get('basic', {}).get('num_edges', 0)),
+            'diameter': float(diam),
+            'avg_degree': float(gf.get('degree', {}).get('avg', 0)),
+            'skew': skew,
+            'boundary_degree_sum': float(gf.get('partition', {}).get('boundary_degree_sum', 0)),
+            'vertex_scan_factor': float(npart),
+            'edge_scan_factor': float(npart),
+        }
+
+    def _instantiate_symbolic_from_families(
+        self,
+        families: Dict[str, Any],
+        stats: Dict[str, float],
+    ) -> Dict[str, float]:
+        """Turn template families + graph stats into the legacy 12 float names."""
+        nv = stats.get('num_vertices', 0.0)
+        ne = stats.get('num_edges', 0.0)
+        n_v = max(1.0, stats.get('vertex_scan_factor', 1.0))
+        n_e = max(1.0, stats.get('edge_scan_factor', 1.0))
+        d_raw = int(stats.get('diameter', 1))
+        d_eff = min(max(1, d_raw), 10)
+        avg_deg = stats.get('avg_degree', 0.0)
+        skew = stats.get('skew', 1.0)
+        bnd = stats.get('boundary_degree_sum', 0.0)
+
+        out: Dict[str, float] = {}
+
+        def pair(fid: str, coeff: float, active: bool) -> None:
+            out[f'sym_{fid}_coeff'] = float(coeff) if active else 0.0
+            out[f'sym_{fid}_requires'] = 1.0 if active else 0.0
+
+        fv = families.get('vscan', {})
+        pair('vscan', nv / n_v, bool(fv.get('detected')))
+
+        fe = families.get('escan', {})
+        pair('escan', ne / n_e, bool(fe.get('detected')))
+
+        ff = families.get('fscan', {})
+        # Approximate sum_t |E_t| by |E| when per-round edges are unavailable
+        pair('fscan', float(ne), bool(ff.get('detected')))
+
+        fr = families.get('rexp', {})
+        rexp_val = (avg_deg ** d_eff) if avg_deg > 0 else 0.0
+        pair('rexp', rexp_val, bool(fr.get('detected')))
+
+        fa = families.get('atom', {})
+        pair('atom', ne * skew, bool(fa.get('detected')))
+
+        fc = families.get('comm', {})
+        pair('comm', bnd, bool(fc.get('detected')))
+
+        return out
+
+    def _is_legacy_symbolic_flat(self, symbolic: Dict[str, Any]) -> bool:
+        return 'sym_vscan_coeff' in symbolic and 'families' not in symbolic
+
     def instantiate_symbolic(
         self,
-        symbolic_features: Dict[str, float],
-        graph_stats: Dict[str, Any]
+        symbolic_block: Dict[str, Any],
+        graph_stats: Dict[str, float],
     ) -> Dict[str, float]:
         """
         Instantiate symbolic features with graph statistics.
-        
-        Args:
-            symbolic_features: Symbolic features with placeholders
-            graph_stats: Graph statistics for instantiation
-            
-        Returns:
-            Instantiated symbolic features
+
+        Accepts either:
+        - format_version 2 with ``families`` (templates + formulas in query YAML), or
+        - legacy flat dict with sym_*_coeff / sym_*_requires placeholders.
         """
-        instantiated = symbolic_features.copy()
-        
-        # VScan: |V| or |V|/n
-        if symbolic_features.get('sym_vscan_requires', 0) > 0:
-            instantiated['sym_vscan_coeff'] = graph_stats.get('num_vertices', 0)
-        
-        # EScan: |E| or |E|/n
-        if symbolic_features.get('sym_escan_requires', 0) > 0:
-            instantiated['sym_escan_coeff'] = graph_stats.get('num_edges', 0)
-        
-        # FScan: D × |E|/D = |E| (approximation)
-        if symbolic_features.get('sym_fscan_requires', 0) > 0:
-            diameter = graph_stats.get('diameter', 1)
-            num_edges = graph_stats.get('num_edges', 0)
-            instantiated['sym_fscan_coeff'] = num_edges  # Simplified: D * (E/D)
-        
-        # RExp: avg_degree ^ diameter
-        if symbolic_features.get('sym_rexp_requires', 0) > 0:
-            avg_degree = graph_stats.get('avg_degree', 2)
-            diameter = min(graph_stats.get('diameter', 3), 10)  # Cap to avoid overflow
-            instantiated['sym_rexp_coeff'] = avg_degree ** diameter
-        
-        # Atom: |E| × skew
-        if symbolic_features.get('sym_atom_requires', 0) > 0:
-            num_edges = graph_stats.get('num_edges', 0)
-            skew = graph_stats.get('skew', 1)
-            instantiated['sym_atom_coeff'] = num_edges * skew
-        
-        # Comm: boundary_degree_sum
-        if symbolic_features.get('sym_comm_requires', 0) > 0:
-            instantiated['sym_comm_coeff'] = graph_stats.get('boundary_degree_sum', 0)
-        
-        return instantiated
+        if symbolic_block.get('format_version') == 2 or 'families' in symbolic_block:
+            families = symbolic_block.get('families', {})
+            return self._instantiate_symbolic_from_families(families, graph_stats)
+
+        if self._is_legacy_symbolic_flat(symbolic_block):
+            instantiated = dict(symbolic_block)
+
+            if symbolic_block.get('sym_vscan_requires', 0) > 0:
+                n = max(1.0, graph_stats.get('vertex_scan_factor', 1.0))
+                instantiated['sym_vscan_coeff'] = graph_stats.get('num_vertices', 0) / n
+
+            if symbolic_block.get('sym_escan_requires', 0) > 0:
+                n = max(1.0, graph_stats.get('edge_scan_factor', 1.0))
+                instantiated['sym_escan_coeff'] = graph_stats.get('num_edges', 0) / n
+
+            if symbolic_block.get('sym_fscan_requires', 0) > 0:
+                instantiated['sym_fscan_coeff'] = graph_stats.get('num_edges', 0)
+
+            if symbolic_block.get('sym_rexp_requires', 0) > 0:
+                avg_degree = graph_stats.get('avg_degree', 2)
+                diameter = min(int(graph_stats.get('diameter', 3)), 10)
+                instantiated['sym_rexp_coeff'] = avg_degree ** max(1, diameter)
+
+            if symbolic_block.get('sym_atom_requires', 0) > 0:
+                instantiated['sym_atom_coeff'] = (
+                    graph_stats.get('num_edges', 0) * graph_stats.get('skew', 1)
+                )
+
+            if symbolic_block.get('sym_comm_requires', 0) > 0:
+                instantiated['sym_comm_coeff'] = graph_stats.get('boundary_degree_sum', 0)
+
+            return instantiated
+
+        # Empty or unknown: zeros
+        return {
+            'sym_vscan_coeff': 0.0,
+            'sym_vscan_requires': 0.0,
+            'sym_escan_coeff': 0.0,
+            'sym_escan_requires': 0.0,
+            'sym_fscan_coeff': 0.0,
+            'sym_fscan_requires': 0.0,
+            'sym_rexp_coeff': 0.0,
+            'sym_rexp_requires': 0.0,
+            'sym_atom_coeff': 0.0,
+            'sym_atom_requires': 0.0,
+            'sym_comm_coeff': 0.0,
+            'sym_comm_requires': 0.0,
+        }
     
     def extract_graph_features(
         self,
@@ -222,9 +309,9 @@ class FeatureMerger:
         # Extract static features
         static = query_features.get('query_features', {}).get('static', {})
         
-        # Extract and instantiate symbolic features
+        # Extract and instantiate symbolic features (templates -> numbers using graph YAML)
         symbolic = query_features.get('query_features', {}).get('symbolic', {})
-        graph_stats = self.extract_graph_features(graph_features)
+        graph_stats = self.graph_stats_for_symbolic_instantiation(graph_features)
         symbolic_instantiated = self.instantiate_symbolic(symbolic, graph_stats)
         
         # Build merged features for each configuration
@@ -270,7 +357,6 @@ class FeatureMerger:
         
         # Extract features
         config_features = self.extract_config_features(config_data)
-        graph_stats = self.extract_graph_features(graph_data)
         
         # Merge
         feature_matrix, feature_names = self.merge(
@@ -353,13 +439,13 @@ def main():
     merger.save_to_yaml(result, args.output)
     
     # Print summary
-    print(f"Features merged successfully:")
+    print("Features merged successfully:")
     print(f"  Query: {args.query}")
     print(f"  Graph: {args.graph}")
     print(f"  Config: {args.config}")
     print(f"  Output: {args.output}")
     print(f"  Feature matrix: {result['metadata']['num_samples']} samples × {result['metadata']['num_features']} features")
-    print(f"\nFeature groups:")
+    print("\nFeature groups:")
     for group, count in result['feature_groups'].items():
         print(f"  {group}: {count}")
 

@@ -16,6 +16,7 @@ from autoconfig import (
     BayesianExecutionTimeModel,
     CostPredictor,
 )
+from autoconfig.utils.feature_merger import FeatureMerger
 
 
 class TestStaticFeatureExtractor(unittest.TestCase):
@@ -124,6 +125,32 @@ class TestSymbolicFeatureExtractor(unittest.TestCase):
         # sym_atom_coeff should be > 0
         self.assertGreater(features[8], 0)
         self.assertEqual(features[9], 1.0)  # requires flag
+
+
+class TestFeatureMergerSymbolic(unittest.TestCase):
+    """Merge step: symbolic templates + graph YAML -> numeric sym_* features."""
+
+    def test_instantiate_from_families_matches_graph_stats(self):
+        sym = SymbolicFeatureExtractor().extract_symbolic_expressions(
+            "for v in G.vertices():\n  pass\n"
+        )
+        graph_data = {
+            "graph_features": {
+                "basic": {"num_vertices": 1000, "num_edges": 200},
+                "degree": {"avg": 4.0, "skew": 1.5},
+                "structure": {"diameter": 5},
+                "partition": {
+                    "num_partitions": 2,
+                    "boundary_degree_sum": 12,
+                },
+            }
+        }
+        merger = FeatureMerger()
+        stats = merger.graph_stats_for_symbolic_instantiation(graph_data)
+        self.assertEqual(stats["num_vertices"], 1000.0)
+        out = merger.instantiate_symbolic(sym, stats)
+        self.assertEqual(out["sym_vscan_requires"], 1.0)
+        self.assertEqual(out["sym_vscan_coeff"], 500.0)  # |V|/n, n=2
 
 
 class TestGraphPartitionExtractor(unittest.TestCase):

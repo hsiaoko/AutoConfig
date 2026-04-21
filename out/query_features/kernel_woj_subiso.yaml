@@ -1,0 +1,41 @@
+feature_count:
+  static: 8
+  symbolic: 12
+  total: 20
+metadata:
+  input_file: data/queries/kernel_woj_subiso.cu
+  output_file: out/query_features/kernel_woj_subiso.yaml
+placeholders:
+  note: Graph-dependent symbolic coefficients use placeholders. Will be instantiated
+    in merge stage.
+  required_graph_stats:
+  - num_vertices
+  - num_edges
+  - diameter
+  - avg_degree
+  - max_degree
+  - skew
+  - boundary_degree_sum
+query_features:
+  static:
+    static_atomic_op_count: 17.0
+    static_branch_count: 49.0
+    static_explicit_parallel_flag: 1.0
+    static_loop_count: 50.0
+    static_max_loop_depth: 3.0
+    static_recursion_count: 0.0
+    static_sync_count: 14.0
+    static_variable_count: 74.0
+  symbolic:
+    sym_atom_coeff: 1.0
+    sym_atom_requires: 1.0
+    sym_comm_coeff: 0.0
+    sym_comm_requires: 0.0
+    sym_escan_coeff: 0.0
+    sym_escan_requires: 0.0
+    sym_fscan_coeff: 0.0
+    sym_fscan_requires: 0.0
+    sym_rexp_coeff: 0.0
+    sym_rexp_requires: 0.0
+    sym_vscan_coeff: 0.0
+    sym_vscan_requires: 0.0

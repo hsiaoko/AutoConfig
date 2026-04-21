@@ -40,10 +40,11 @@ def cmd_query(args):
 
     extractor.save_to_yaml(features, args.output)
 
+    fc = features['feature_count']
     print(f"Query features extracted:")
-    print(f"  Static: {features['feature_count']['static']}")
-    print(f"  Symbolic: {features['feature_count']['symbolic']}")
-    print(f"  Total: {features['feature_count']['total']}")
+    print(f"  Static scalars: {fc['static']}")
+    print(f"  Symbolic template families: {fc.get('symbolic_families', fc.get('symbolic', '?'))}")
+    print(f"  Numeric symbolic dims after merge: {fc.get('symbolic_numeric_dim_after_merge', '?')}")
     print(f"  Output: {args.output}")
 
 
@@ -236,7 +237,12 @@ def cmd_all(args):
         query_features = query_extractor.extract_from_file(args.query)
         query_output = output_dir / 'query_features.yaml'
         query_extractor.save_to_yaml(query_features, str(query_output))
-        print(f"  Query features: {query_features['feature_count']['total']} features")
+        qfc = query_features['feature_count']
+        print(
+            f"  Query: {qfc['static']} static + "
+            f"{qfc.get('symbolic_families', '?')} symbolic families "
+            f"(→ {qfc.get('symbolic_numeric_dim_after_merge', '?')} numeric slots after merge)"
+        )
     else:
         print("\n[1/3] Skipping query features")
 

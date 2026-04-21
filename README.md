@@ -1,333 +1,158 @@
-# AutoConfig - 图查询执行时间预测
+# AutoConfig — 图查询执行时间预测
 
-基于机器学习的图查询执行时间预测系统
+基于特征抽取与机器学习的图查询执行时间 / 成本估计，支持论文中的 **静态特征**、**符号模板（公式）**、**图与划分统计**、**系统配置** 四元组流水线。
 
-## 快速开始
+---
 
-### 安装
+## 安装
+
+在仓库根目录（含 `pyproject.toml` / `requirements.txt`）执行：
 
 ```bash
-cd autoconfig
-python3 -m venv venv
-source venv/bin/activate
+cd AutoConfig
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .
 ```
 
-### 使用命令行工具
+安装完成后可使用命令行入口 `autoconfig`，或直接用 `python experiments/scripts/step*.py` 跑四步流水线。
+
+---
+
+## 特征流水线（四步 YAML）
+
+与论文 §5 一致：**查询 YAML**（静态为数值、符号为模板与公式）→ **图 YAML** → **系统配置 YAML** → **合并为最终数值特征矩阵**。
+
+| 步骤 | 作用 | 输出文件 |
+|------|------|----------|
+| 1 | 从查询源码抽取 `Φ_static` 与符号模板 `Φ_sym`（`format_version: 2`，含公式，不含图上的最终系数） | `query_features.yaml` |
+| 2 | 从边列表（或分片目录）计算图与划分统计 | `graph_features.yaml` |
+| 3 | LHS 等资源采样生成候选配置 | `config_features.yaml` |
+| 4 | 用图统计**实例化**符号模板，并与静态 / 图 / 配置拼成向量 | `merged_features.yaml` |
+
+### 方式 A：四段独立脚本（推荐对照论文）
+
+在仓库根目录执行：
 
 ```bash
-# 1. 提取查询代码特征（使用占位符）
-autoconfig query --input data/queries/gar_match.cu --output out/query_features.yaml
+python experiments/scripts/step1_query_features.py \
+  -i data/queries/your_query.py -o out/query_features.yaml
 
-# 2. 提取图数据特征
-autoconfig graph --input data/edges.csv --output out/graph_features.yaml
+python experiments/scripts/step2_graph_features.py \
+  -i data/edges.csv -o out/graph_features.yaml
 
-# 3. 生成配置样本（LHS 采样）
-autoconfig config --num-samples 20 --output out/config_features.yaml --use-default-catalog
+python experiments/scripts/step3_system_config.py \
+  -n 20 -o out/config_features.yaml --use-default-catalog
 
-# 4. 合并所有特征（实例化符号特征）
-autoconfig merge \
-    --query out/query_features.yaml \
-    --graph out/graph_features.yaml \
-    --config out/config_features.yaml \
-    --output out/merged_features.yaml
+python experiments/scripts/step4_merge_features.py \
+  -q out/query_features.yaml \
+  -g out/graph_features.yaml \
+  -c out/config_features.yaml \
+  -o out/merged_features.yaml
 ```
 
-**完整管道**:
+### 方式 B：`autoconfig` 子命令
+
 ```bash
-# 一键完成所有步骤
+autoconfig query  --input data/queries/gar_match.cu --output out/query_features.yaml
+autoconfig graph  --input data/edges.csv --output out/graph_features.yaml
+autoconfig config --num-samples 20 --output out/config_features.yaml --use-default-catalog
+autoconfig merge   --query out/query_features.yaml --graph out/graph_features.yaml \
+                   --config out/config_features.yaml --output out/merged_features.yaml
+```
+
+一键生成前三类产物（不含第四步合并）：
+
+```bash
 autoconfig all --query query.cu --graph data/ --config-n 20 --output out/
 ```
 
 ---
 
-## 多 Agent 开发系统
+## 符号特征说明
 
-本项目配备了基于 LangChain 的多 Agent 开发自动化系统，可用于：
+- **Step 1 的 YAML** 中，`symbolic` 为 **模板层**：每个模式（VScan、EScan、FScan、RExp、Atom、Comm）包含 `template`、`formula`、`detected` 以及所需图/划分字段说明，**不是**最终 `|V|`、`|E|` 等标量。
+- **Step 4** 读取 `graph_features.yaml`，由 `FeatureMerger` 将模板实例化为 **12 维** 数值特征（`sym_*_coeff` / `sym_*_requires`），供下游 MLP 使用。
+- 若仍使用旧版「扁平 `sym_*` 占位」查询 YAML，合并器仍兼容。
 
-- **DevAgent** - 自动实现功能、修复 Bug
-- **TestAgent** - 自动生成单元测试
-- **DocAgent** - 自动生成文档
-- **ReviewAgent** - 代码审查
-
-### 安装开发依赖
-
-```bash
-pip install langchain langchain-openai langchain-community pyyaml
-```
-
-### 配置
-
-```bash
-export OPENAI_API_KEY=sk-...
-```
-
-### 使用
-
-```bash
-# 查看状态
-python -m dev_harness status
-
-# 列出 Agent
-python -m dev_harness list-agents
-
-# 运行开发任务
-python -m dev_harness run --task "为 config_generator.py 添加 GPU 资源支持"
-
-# 运行测试 Agent
-python -m dev_harness run --agent test --target autoconfig/utils/config_generator.py
-
-# 运行完整管道
-python -m dev_harness pipeline --task "实现 GPU 资源配置功能"
-```
-
-详细文档请参阅 [dev_harness/README.md](dev_harness/README.md) 和 [dev_harness/QUICKSTART.md](dev_harness/QUICKSTART.md)。
+详细公式与字段表见 **[docs/feature_extraction.md](docs/feature_extraction.md)**，四步说明见 **[docs/FEATURE_PIPELINE.md](docs/FEATURE_PIPELINE.md)**。
 
 ---
 
-## 功能特性
+## 文档索引
 
-### 1. 查询代码特征提取
-
-从图查询源代码提取 20 个特征（8 个静态 + 12 个符号）：
-
-```bash
-autoconfig query --input bfs.py --output out/query.yaml
-```
-
-**静态特征**: 循环、分支、递归、原子操作、同步等
-
-**符号特征**: VScan、EScan、FScan、RExp、Atom、Comm（用图统计实例化）
-
-### 2. 图数据特征提取
-
-从边列表格式提取图特征，支持单图和分图：
-
-```bash
-# 单图
-autoconfig graph --input graph.csv --output out/graph.yaml
-
-# 分图（文件夹）
-autoconfig graph --input partitions/ --output out/graph.yaml
-```
-
-**输出**: 顶点数、边数、度统计、直径、聚类系数、分区质量指标等
-
-### 3. 配置生成（LHS 采样）
-
-使用拉丁超立方采样生成配置样本：
-
-```bash
-autoconfig config --num-samples 20 --output out/configs.yaml --use-default-catalog
-```
-
-**配置**: (k 实例数，资源类型) 元组，覆盖 CPU、内存、存储、GPU 维度
+| 文档 | 说明 |
+|------|------|
+| [docs/README.md](docs/README.md) | 文档导航 |
+| [docs/FEATURE_PIPELINE.md](docs/FEATURE_PIPELINE.md) | 四步流水线（英文） |
+| [docs/feature_extraction.md](docs/feature_extraction.md) | 特征定义与合并后维度 |
+| [docs/USAGE_GUIDE_CN.md](docs/USAGE_GUIDE_CN.md) | 中文使用指南 |
+| [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) | CLI 详解 |
+| [docs/api_reference.md](docs/api_reference.md) | API 参考 |
 
 ---
 
-## 文档
+## 功能概览
 
-| Document | Description |
-|----------|-------------|
-| [中文使用指南](docs/USAGE_GUIDE_CN.md) | **完整的中文使用文档** |
-| [CLI Guide](docs/CLI_GUIDE.md) | Command-line tools detailed guide |
-| [Feature Extraction](docs/FEATURE_EXTRACTION.md) | Feature extraction methods (English) |
-| [Usage Guide](docs/usage_guide.md) | Python API usage |
-| [API Reference](docs/api_reference.md) | Class and function documentation |
-| [Quick Start](docs/quickstart.md) | 5-minute introduction |
+### 查询特征
+
+- **静态**：循环深度、分支、变量、递归、原子操作、同步、显式并行等。
+- **符号**：六种 workload 模板 + 公式字符串；在 merge 阶段用图统计求值。
+
+### 图特征
+
+支持单边列表 CSV 或 **分片目录**（多文件），输出顶点/边数、度分布、直径、聚类系数、划分与边界等（见 `graph_features.yaml` 结构）。
+
+### 配置生成
+
+对资源目录做 Latin Hypercube 采样，得到 `(k, resource)` 候选集合，写入 `config_features.yaml`。
 
 ---
 
-## 项目结构
+## 项目结构（节选）
 
 ```
-autoconfig/
-├── autoconfig/              # 主包
-│   ├── __init__.py
-│   ├── main.py              # 训练管道
-│   ├── cli.py               # 命令行接口
-│   ├── feature_extractor/   # 特征提取模块
-│   │   ├── static_extractor.py
-│   │   ├── symbolic_extractor.py
-│   │   ├── graph_partition_extractor.py
-│   │   └── feature_manager.py
-│   ├── models/              # 模型模块
-│   │   └── bayesian_model.py
-│   ├── prediction/          # 预测模块
-│   │   └── cost_predictor.py
-│   └── utils/               # 工具模块
+AutoConfig/
+├── autoconfig/                 # 主包
+│   ├── cli.py
+│   ├── feature_extractor/      # static / symbolic / graph_partition
+│   └── utils/
 │       ├── query_feature_extractor.py
 │       ├── graph_feature_extractor.py
-│       └── config_generator.py
-├── examples/                # 示例数据
-│   ├── query_bfs.py
-│   ├── graph_small.csv
-│   └── partitions/
-├── out/                     # 输出目录
-├── docs/                    # 文档
-├── resources_template.yaml  # 资源目录模板
+│       ├── config_generator.py
+│       └── feature_merger.py
+├── experiments/
+│   └── scripts/
+│       ├── step1_query_features.py
+│       ├── step2_graph_features.py
+│       ├── step3_system_config.py
+│       └── step4_merge_features.py
+├── docs/                       # 说明文档
 ├── requirements.txt
+├── pyproject.toml
 └── README.md
 ```
 
 ---
 
-## 示例
-
-### 查询代码特征
-
-```python
-# examples/query_bfs.py
-def BFS(Graph G, vertex source):
-    worklist = [source]
-    visited[source] = true
-    
-    while !worklist.empty():
-        for v in worklist:
-            for neighbor in G.neighbors(v):
-                if !visited[neighbor]:
-                    visited[neighbor] = true
-                    worklist.append(neighbor)
-```
-
-运行：
-```bash
-autoconfig query --input examples/query_bfs.py --output out/query.yaml
-```
-
-输出：
-```yaml
-query_features:
-  static:
-    static_loop_count: 2.0
-    static_branch_count: 1.0
-    ...
-  symbolic:
-    sym_escan_coeff: 5000.0  # 边扫描
-    sym_fscan_coeff: 5000.0  # 前沿迭代
-    ...
-```
-
-### 图数据特征
-
-边列表格式：
-```csv
-src,dst
-0,1
-0,2
-1,2
-2,3
-```
-
-运行：
-```bash
-autoconfig graph --input examples/graph_small.csv --output out/graph.yaml
-```
-
-输出：
-```yaml
-graph_features:
-  basic:
-    num_vertices: 10
-    num_edges: 17
-  degree:
-    avg: 3.4
-    max: 4.0
-    skew: 1.18
-  structure:
-    diameter: 5
-    clustering_coeff: 0.63
-  ...
-```
-
-### 配置生成
-
-运行：
-```bash
-autoconfig config --num-samples 10 --output out/configs.yaml --use-default-catalog
-```
-
-输出：
-```yaml
-configurations:
-  - config_id: 0
-    k: 4
-    resource:
-      cpu_cores: 16
-      memory_gb: 64
-      num_gpus: 1
-  - config_id: 1
-    k: 8
-    resource:
-      cpu_cores: 32
-      memory_gb: 128
-      num_gpus: 4
-  ...
-```
-
----
-
-## 训练预测模型
+## 训练与推荐（简述）
 
 ```bash
-# 训练贝叶斯模型（时间和成本预测）
 autoconfig train --n-samples 500 --output data/models/
 ```
 
-或使用 Python API：
-
-```python
-from autoconfig import Trainer
-
-trainer = Trainer('data/models/')
-metrics = trainer.train(num_samples=500)
-print(f"R² scores: time={metrics['time_model']['test_r2']:.4f}, cost={metrics['cost_model']['test_r2']:.4f}")
-```
-
----
-
-## 配置推荐
-
 ```bash
-# 从查询源代码文件推荐最优配置
-autoconfig recommend \
-    --query my_algorithm.cu \
-    --graph data/graph.csv \
-    --top-n 3 \
-    --output out/recommendation.yaml
+autoconfig recommend --query my_algorithm.cu --graph data/graph.csv --top-n 3 --output out/recommendation.yaml
 ```
 
-系统会：
-1. 自动分析代码复杂度（v_scan, e_scan, f_scan, atomic, sync）
-2. 提取图特征
-3. 使用训练好的模型预测执行时间和成本
-4. 返回 Top-3 个**不同的**最优配置（按成本排序）
-
-**输出示例**：
-```
-Top 3 Diverse Recommendations:
-
-[Rank 1] default_5_pert_+2
-  CPU: 136 cores, Memory: 512 GB, GPU: 8
-  Predicted Time: 0.46 ms, Cost: 0.5425
-
-[Rank 2] default_5_pert_+1
-  CPU: 132 cores, Memory: 512 GB, GPU: 8
-  Predicted Time: 0.46 ms, Cost: 0.5449
-
-[Rank 3] default_5
-  CPU: 128 cores, Memory: 512 GB, GPU: 8
-  Predicted Time: 0.47 ms, Cost: 0.5473
-```
+更多参数与实验脚本见 [experiments/README.md](experiments/README.md)。
 
 ---
 
-## 参考资料
+## 多 Agent 开发系统（可选）
 
-- 特征提取方法基于 Hybrid 图查询成本估计研究
-- 贝叶斯模型参考数据库调优工作（Bayesian Optimization, DBTune 等）
-- LHS 采样方法用于高效配置空间探索
+参见 [dev_harness/README.md](dev_harness/README.md)、[dev_harness/QUICKSTART.md](dev_harness/QUICKSTART.md)。
 
 ---
 

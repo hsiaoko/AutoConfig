@@ -2,7 +2,8 @@
 Query Code Feature Extractor
 
 Extracts features from graph query source code and outputs to YAML.
-Uses placeholders for graph-dependent values.
+Static features are numeric; symbolic features are template names + formulas
+(see SymbolicFeatureExtractor.extract_symbolic_expressions).
 
 Usage:
     python -m autoconfig.utils.query_feature_extractor \
@@ -38,9 +39,9 @@ class QueryFeatureExtractor:
     ) -> Dict[str, Any]:
         """
         Extract features from query code.
-        
-        Graph-dependent symbolic features use placeholders that will be
-        instantiated in the merge stage with actual graph statistics.
+
+        Symbolic features are templates (names + formulas); numeric instantiation
+        happens in the merge step with graph_features.yaml.
 
         Args:
             source_code: Query source code string
@@ -48,32 +49,32 @@ class QueryFeatureExtractor:
         Returns:
             Dictionary of features with placeholders
         """
-        # Extract static features
+        # Extract static features (concrete scalars from code structure)
         static_features = self.static_extractor.extract(source_code)
         static_names = self.static_extractor.get_feature_names()
 
-        # Extract symbolic features (template-only, placeholders for graph stats)
-        symbolic_features = self.symbolic_extractor.extract_templates(source_code)
-        symbolic_names = self.symbolic_extractor.get_feature_names()
+        # Symbolic: template names + formulas; values materialize at merge with graph YAML
+        symbolic_payload = self.symbolic_extractor.extract_symbolic_expressions(source_code)
 
         # Build result dictionary
         result = {
             'query_features': {
                 'static': self._features_to_dict(static_features, static_names),
-                'symbolic': self._features_to_dict(symbolic_features, symbolic_names),
+                'symbolic': symbolic_payload,
             },
             'feature_count': {
                 'static': len(static_features),
-                'symbolic': len(symbolic_features),
-                'total': len(static_features) + len(symbolic_features),
+                'symbolic_families': len(symbolic_payload['families']),
+                'symbolic_numeric_dim_after_merge': len(self.symbolic_extractor.get_feature_names()),
+                'total_static_plus_symbolic_slots': len(static_features) + len(
+                    self.symbolic_extractor.get_feature_names()
+                ),
             },
             'placeholders': {
-                'note': 'Graph-dependent symbolic coefficients use placeholders. Will be instantiated in merge stage.',
-                'required_graph_stats': [
-                    'num_vertices', 'num_edges', 'diameter',
-                    'avg_degree', 'max_degree', 'skew',
-                    'boundary_degree_sum'
-                ],
+                'note': (
+                    'Symbolic entries are partial functions (template + formula). '
+                    'Step 4 merges with graph_features.yaml and system config to produce numeric vectors.'
+                ),
             }
         }
 
@@ -157,12 +158,12 @@ def main():
     # Save to YAML
     extractor.save_to_yaml(features, args.output)
 
-    print(f"Query features extracted:")
-    print(f"  Static: {features['feature_count']['static']}")
-    print(f"  Symbolic: {features['feature_count']['symbolic']}")
-    print(f"  Total: {features['feature_count']['total']}")
+    fc = features['feature_count']
+    print("Query features extracted:")
+    print(f"  Static scalars: {fc['static']}")
+    print(f"  Symbolic families (templates / formulas): {fc['symbolic_families']}")
+    print(f"  After merge, symbolic becomes {fc['symbolic_numeric_dim_after_merge']} numeric features")
     print(f"  Output: {args.output}")
-    print(f"  Note: Graph-dependent values use placeholders")
 
 
 if __name__ == '__main__':

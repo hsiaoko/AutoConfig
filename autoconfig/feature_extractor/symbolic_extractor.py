@@ -15,6 +15,9 @@ import re
 from typing import Dict, Any, List, Tuple, Optional
 import numpy as np
 
+# Paper Table: symbolic workload templates (formulas are instantiated in the merge stage).
+SYMBOLIC_FAMILY_IDS = ("vscan", "escan", "fscan", "rexp", "atom", "comm")
+
 
 class SymbolicFeatureExtractor:
     """
@@ -152,47 +155,87 @@ class SymbolicFeatureExtractor:
         """
         Extract symbolic feature templates without graph instantiation.
         
-        Uses placeholders (1.0) for coefficients that require graph statistics.
-        
-        Args:
-            source_code: Source code string
-            
-        Returns:
-            numpy array of symbolic features with placeholders
+        Deprecated for YAML output: use ``extract_symbolic_expressions`` so that
+        symbolic features are stored as template formulas, not placeholder floats.
+        This method remains for backward compatibility with numeric pipelines.
         """
+        expr = self.extract_symbolic_expressions(source_code)
+        families = expr["families"]
+        order = SYMBOLIC_FAMILY_IDS
         features = []
-
-        # 1. Vertex scanning - detect pattern, use placeholder
-        vscan_detected = self._detect_vertex_scan(source_code)
-        features.append(1.0 if vscan_detected else 0.0)  # placeholder
-        features.append(1.0 if vscan_detected else 0.0)
-
-        # 2. Edge scanning - detect pattern, use placeholder
-        escan_detected = self._detect_edge_scan(source_code)
-        features.append(1.0 if escan_detected else 0.0)  # placeholder
-        features.append(1.0 if escan_detected else 0.0)
-
-        # 3. Frontier iteration - detect pattern, use placeholder
-        fscan_detected = self._detect_frontier_scan(source_code)
-        features.append(1.0 if fscan_detected else 0.0)  # placeholder
-        features.append(1.0 if fscan_detected else 0.0)
-
-        # 4. Recursive expansion - detect pattern, use placeholder
-        rexp_detected = self._detect_recursive_exp(source_code)
-        features.append(1.0 if rexp_detected else 0.0)  # placeholder
-        features.append(1.0 if rexp_detected else 0.0)
-
-        # 5. Atomic update - detect pattern, use placeholder
-        atom_detected = self._detect_atomic_update(source_code)
-        features.append(1.0 if atom_detected else 0.0)  # placeholder
-        features.append(1.0 if atom_detected else 0.0)
-
-        # 6. Cross-partition communication - detect pattern, use placeholder
-        comm_detected = self._detect_cross_partition(source_code)
-        features.append(1.0 if comm_detected else 0.0)  # placeholder
-        features.append(1.0 if comm_detected else 0.0)
-
+        for fid in order:
+            fam = families[fid]
+            features.append(1.0 if fam["detected"] else 0.0)
+            features.append(1.0 if fam["detected"] else 0.0)
         return np.array(features, dtype=np.float64)
+
+    def extract_symbolic_expressions(
+        self,
+        source_code: str,
+    ) -> Dict[str, Any]:
+        """
+        Stage-wise symbolic templates: partial functions expressed as formulas.
+
+        Static analysis only identifies which templates apply; concrete values
+        are produced when graph/partition statistics are supplied (merge step).
+
+        Returns:
+            Dict with ``families`` keyed by vscan, escan, fscan, rexp, atom, comm.
+        """
+        families: Dict[str, Dict[str, Any]] = {
+            "vscan": {
+                "template": "VScan(V, n)",
+                "formula": "|V| / n",
+                "latex": r"\mathrm{VScan}(V,n): |V| \text{ or } |V|/n",
+                "detected": self._detect_vertex_scan(source_code),
+                "requires_graph": ["num_vertices"],
+                "requires_partition": [],
+            },
+            "escan": {
+                "template": "EScan(E, n)",
+                "formula": "|E| / n",
+                "latex": r"\mathrm{EScan}(E,n): |E| \text{ or } |E|/n",
+                "detected": self._detect_edge_scan(source_code),
+                "requires_graph": ["num_edges"],
+                "requires_partition": [],
+            },
+            "fscan": {
+                "template": "FScan(G, n)",
+                "formula": "sum_{t=1}^{D} |E_t|",
+                "latex": r"\mathrm{FScan}(G,n): \sum_{t=1}^{\mathbb{D}} |E_t|",
+                "detected": self._detect_frontier_scan(source_code),
+                "requires_graph": ["num_edges", "diameter"],
+                "requires_partition": [],
+            },
+            "rexp": {
+                "template": "RExp(G)",
+                "formula": "prod_{i=1}^{D} E[deg(v_i)]",
+                "latex": r"\mathrm{RExp}(G): \prod_{i=1}^{\mathbb{D}} \mathbb{E}[\deg(v_i)]",
+                "detected": self._detect_recursive_exp(source_code),
+                "requires_graph": ["avg_degree", "diameter"],
+                "requires_partition": [],
+            },
+            "atom": {
+                "template": "Atom(G)",
+                "formula": "|E| * skew(G)",
+                "latex": r"\mathrm{Atom}(G): |E| \cdot \mathrm{skew}(G)",
+                "detected": self._detect_atomic_update(source_code),
+                "requires_graph": ["num_edges", "skew"],
+                "requires_partition": [],
+            },
+            "comm": {
+                "template": "Comm(G, F)",
+                "formula": "sum_{v in V_d} deg_d(v)",
+                "latex": r"\mathrm{Comm}(G,\mathcal{F}): \sum_{v \in V_\partial} \deg_\partial(v)",
+                "detected": self._detect_cross_partition(source_code),
+                "requires_graph": [],
+                "requires_partition": ["boundary_degree_sum"],
+            },
+        }
+        return {
+            "format_version": 2,
+            "families": families,
+        }
 
     def extract(
         self,
