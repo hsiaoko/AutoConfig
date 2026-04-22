@@ -110,9 +110,9 @@ Adds assortativity and transitivity on top of structural stats similar to the qu
 
 **Module:** `autoconfig.feature_extractor.config_extractor`
 
-### `extract(config)` → 10-D vector
+### `extract(config)` → 10-D vector (legacy extractor path)
 
-Typical names: `conf_memory_limit`, `conf_num_threads`, `conf_cache_size`, `conf_batch_size`, `conf_io_buffer_size`, `conf_num_workers`, `conf_timeout`, `conf_enable_index`, `conf_index_type`, `conf_compression_enabled`.
+**`FeatureMerger`** (merge step) uses a **12-D** config block per row when building the full vector: the names above plus `conf_grid_size` and `conf_block_size` (from resource `grid_size` / `block_size`, default 0). Typical merged width: **49** (8+12+17+12).
 
 ---
 

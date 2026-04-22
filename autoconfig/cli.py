@@ -3,15 +3,15 @@
 AutoConfig CLI - Unified Command-Line Interface
 
 Tools for:
-1. Feature extraction (query, graph, config)
+1. Feature extraction (query, graph; config YAML is external)
 2. Offline training (data generation, model training)
 3. Online configuration recommendation
+   (config candidate YAML for merge: author or generate externally; see feature_merger)
 
 Usage:
     # Feature extraction
     autoconfig query --input query.py --output out/query.yaml
     autoconfig graph --input data/edges.csv --output out/graph.yaml
-    autoconfig config --num-samples 20 --output out/configs.yaml
 
     # Offline training
     autoconfig train --n-samples 500 --output data/models/
@@ -72,26 +72,6 @@ def cmd_graph(args):
     print(f"  Vertices: {gf['basic']['num_vertices']}")
     print(f"  Edges: {gf['basic']['num_edges']}")
     print(f"  Partitions: {gf['partition']['num_partitions']}")
-    print(f"  Output: {args.output}")
-
-
-def cmd_config(args):
-    """Handle configuration generation."""
-    from .utils.config_generator import (
-        ConfigGenerator,
-        generate_default_catalog,
-    )
-
-    print("Generating configurations using LHS...")
-    catalog = generate_default_catalog()
-    generator = ConfigGenerator(catalog)
-    k_range = (args.k_min, args.k_max)
-
-    result = generator.generate(args.num_samples, k_range)
-    generator.save_to_yaml(result, args.output)
-
-    print(f"Configuration generation complete:")
-    print(f"  Generated: {len(result['configurations'])} configurations")
     print(f"  Output: {args.output}")
 
 
@@ -218,21 +198,20 @@ def cmd_recommend(args):
 
 
 def cmd_all(args):
-    """Handle complete feature extraction pipeline."""
+    """Query + graph extraction only. Prepare config YAML separately for ``merge``."""
     from .utils.query_feature_extractor import QueryFeatureExtractor
     from .utils.graph_feature_extractor import GraphFeatureExtractor
-    from .utils.config_generator import ConfigGenerator, generate_default_catalog
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
-    print("Complete Feature Extraction Pipeline")
+    print("Query & graph feature extraction (config step removed from pipeline)")
     print("=" * 60)
 
     # 1. Query features
     if args.query:
-        print("\n[1/3] Extracting query features...")
+        print("\n[1/2] Extracting query features...")
         query_extractor = QueryFeatureExtractor()
         query_features = query_extractor.extract_from_file(args.query)
         query_output = output_dir / 'query_features.yaml'
@@ -244,11 +223,11 @@ def cmd_all(args):
             f"(→ {qfc.get('symbolic_numeric_dim_after_merge', '?')} numeric slots after merge)"
         )
     else:
-        print("\n[1/3] Skipping query features")
+        print("\n[1/2] Skipping query features")
 
     # 2. Graph features
     if args.graph:
-        print("\n[2/3] Extracting graph features...")
+        print("\n[2/2] Extracting graph features...")
         graph_extractor = GraphFeatureExtractor()
         graph_path = Path(args.graph)
 
@@ -263,16 +242,10 @@ def cmd_all(args):
         gf = graph_features['graph_features']
         print(f"  Graph: {gf['basic']['num_vertices']} vertices, {gf['basic']['num_edges']} edges")
     else:
-        print("\n[2/3] Skipping graph features")
+        print("\n[2/2] Skipping graph features")
 
-    # 3. Configuration features
-    print("\n[3/3] Generating configurations...")
-    catalog = generate_default_catalog()
-    generator = ConfigGenerator(catalog)
-    result = generator.generate(args.config_n, (args.k_min, args.k_max))
-    config_output = output_dir / 'config_features.yaml'
-    generator.save_to_yaml(result, str(config_output))
-    print(f"  Configurations: {len(result['configurations'])} samples")
+    print("\n  Config candidates: not generated here. Author a config YAML, then run:")
+    print("  autoconfig merge -q <query> -g <graph> -c <config.yaml> -o <merged.yaml>")
 
     print("\n" + "=" * 60)
     print("Feature extraction complete!")
@@ -301,7 +274,7 @@ Examples:
   # Feature extraction
   autoconfig query --input query.py --output out/query.yaml
   autoconfig graph --input graph.csv --output out/graph.yaml
-  autoconfig config --num-samples 20 --output out/configs.yaml
+  autoconfig merge -q out/query.yaml -g out/graph.yaml -c my_config.yaml -o out/merged.yaml
 
   # Training
   autoconfig train --n-samples 500 --output data/models/
@@ -325,14 +298,6 @@ Examples:
     graph_parser.add_argument('--input', '-i', required=True, help='Input edge list file or folder')
     graph_parser.add_argument('--output', '-o', default='out/graph_features.yaml', help='Output YAML file')
     graph_parser.set_defaults(func=cmd_graph)
-
-    # Config command
-    config_parser = subparsers.add_parser('config', help='Generate configurations using LHS')
-    config_parser.add_argument('--num-samples', '-n', type=int, default=20, help='Number of samples')
-    config_parser.add_argument('--k-min', type=int, default=1, help='Min instances')
-    config_parser.add_argument('--k-max', type=int, default=16, help='Max instances')
-    config_parser.add_argument('--output', '-o', default='out/config_features.yaml', help='Output YAML file')
-    config_parser.set_defaults(func=cmd_config)
 
     # Train command
     train_parser = subparsers.add_parser('train', help='Train Bayesian models')
@@ -365,12 +330,9 @@ Examples:
     rec_parser.set_defaults(func=cmd_recommend)
 
     # All command
-    all_parser = subparsers.add_parser('all', help='Complete feature extraction pipeline')
+    all_parser = subparsers.add_parser('all', help='Extract query and graph features (no config gen)')
     all_parser.add_argument('--query', '-q', help='Query source file')
     all_parser.add_argument('--graph', '-g', help='Graph edge list file or folder')
-    all_parser.add_argument('--config-n', type=int, default=20, help='Number of configurations')
-    all_parser.add_argument('--k-min', type=int, default=1, help='Min instances')
-    all_parser.add_argument('--k-max', type=int, default=16, help='Max instances')
     all_parser.add_argument('--output', '-o', default='out/', help='Output directory')
     all_parser.set_defaults(func=cmd_all)
 

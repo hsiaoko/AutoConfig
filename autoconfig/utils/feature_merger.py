@@ -73,7 +73,7 @@ class FeatureMerger:
             'partition_size_std',
             'partition_edge_cut_ratio',
             'partition_balance',
-            # Config features (10)
+            # Config features (12)
             'conf_memory_limit',
             'conf_num_threads',
             'conf_cache_size',
@@ -84,6 +84,8 @@ class FeatureMerger:
             'conf_enable_index',
             'conf_index_type',
             'conf_compression_enabled',
+            'conf_grid_size',
+            'conf_block_size',
         ]
     
     def load_yaml(self, filepath: str) -> Dict[str, Any]:
@@ -261,11 +263,11 @@ class FeatureMerger:
     ) -> List[Dict[str, float]]:
         """Extract config features from loaded config YAML."""
         config_features = config_data.get('config_features', [])
-        
         if not config_features:
-            # Single configuration
-            return [self._config_to_features(config_data.get('configurations', [{}])[0])]
-        
+            configs = config_data.get("configurations") or []
+            if not configs:
+                return [self._config_to_features({})]
+            return [self._config_to_features(c) for c in configs]
         return [self._config_to_features(cf) for cf in config_features]
     
     def _config_to_features(
@@ -273,20 +275,26 @@ class FeatureMerger:
         config: Dict[str, Any]
     ) -> Dict[str, float]:
         """Convert single config to feature dictionary."""
-        k = config.get('k', 1)
-        resource = config.get('resource', config.get('conf_per_instance', {}))
-        
+        if "k" in config:
+            k = int(config.get("k") or 1)
+        else:
+            # Single-node rows may use `node_id` instead of replica count k
+            k = 1
+        resource = config.get("resource", config.get("s", config.get("conf_per_instance", {})))
+
         return {
-            'conf_memory_limit': k * resource.get('memory_gb', 8) * 1024,  # Convert to MB
-            'conf_num_threads': k * resource.get('cpu_cores', 4),
-            'conf_cache_size': k * resource.get('memory_gb', 8) * 1024 // 8,  # 1/8 of memory
-            'conf_batch_size': 1000,  # Default
-            'conf_io_buffer_size': 64,  # Default
-            'conf_num_workers': k * max(1, resource.get('cpu_cores', 4) // 4),
-            'conf_timeout': 300,  # Default
-            'conf_enable_index': 1.0,  # Default enabled
-            'conf_index_type': 1.0,  # Default btree
-            'conf_compression_enabled': 0.0,  # Default disabled
+            "conf_memory_limit": k * resource.get("memory_gb", 8) * 1024,  # MB
+            "conf_num_threads": k * resource.get("cpu_cores", 4),
+            "conf_cache_size": k * resource.get("memory_gb", 8) * 1024 // 8,
+            "conf_batch_size": 1000,
+            "conf_io_buffer_size": 64,
+            "conf_num_workers": k * max(1, resource.get("cpu_cores", 4) // 4),
+            "conf_timeout": 300,
+            "conf_enable_index": 1.0,
+            "conf_index_type": 1.0,
+            "conf_compression_enabled": 0.0,
+            "conf_grid_size": float(resource.get("grid_size", 0) or 0),
+            "conf_block_size": float(resource.get("block_size", 0) or 0),
         }
     
     def merge(
@@ -380,7 +388,7 @@ class FeatureMerger:
                 'static': 8,
                 'symbolic': 12,
                 'graph': 17,
-                'config': 10,
+                'config': 12,
             }
         }
         

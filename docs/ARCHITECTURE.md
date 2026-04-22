@@ -146,7 +146,7 @@ Query code, graph data, and a config catalog are fed through extractors into a *
 ## Extensibility
 
 - New query **templates**: extend `DataGenerator.QUERY_TEMPLATES`.
-- New **resource** shapes: extend `DataGenerator.RESOURCE_CONFIGS` or catalogs used by `ConfigGenerator`.
+- New **resource** shapes: extend `DataGenerator.RESOURCE_CONFIGS` or the config YAML you pass to merge.
 - New **features**: extend the relevant extractor and any merger / vector builder, then retrain.
 
 ## CLI summary
@@ -154,7 +154,6 @@ Query code, graph data, and a config catalog are fed through extractors into a *
 ```bash
 autoconfig query --input query.py --output out/query.yaml
 autoconfig graph --input graph.csv --output out/graph.yaml
-autoconfig config --num-samples 20 --output out/configs.yaml
 autoconfig train --n-samples 500 --output data/models/
 autoconfig recommend --query my_algorithm.cu --graph data/graph.csv --top-n 3
 ```

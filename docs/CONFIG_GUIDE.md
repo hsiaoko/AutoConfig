@@ -1,173 +1,56 @@
-# Configuration generation
+# Configuration YAML for merge
 
-This guide explains how **configuration candidates** are produced: default catalog, CLI resource hints, custom resource YAML, and how that relates to `experiments/scripts/step3_system_config.py`.
+Step 4 (`FeatureMerger`) expects a YAML file that lists **system configuration**
+candidates. The `autoconfig` CLI does **not** run config generation, but the repo
+includes a **small LHS sampler** you can use to emit sample files.
 
-## Background
+## `FeatureMerger` input shape
 
-A bare command such as:
+At minimum, the file should contain:
 
-```bash
-autoconfig config -n 10 -o out/config.yaml
-```
+- **`catalog`**: (optional) list of machine / resource *types* $s \in \mathcal{S}$ — useful for documentation.
+- **`configurations`**: a list of entries, each with:
+  - **`resource`**: per-instance fields such as `cpu_cores`, `memory_gb`, `storage_gb`, `num_gpus`, and optional `grid_size` / `block_size` for GPU launches.
+  - **`k`**: replica count, **or** omit `k` and set **`node_id`** for a single-node row (treated as one instance, `k = 1` in the merger).
+- **`config_features`**: (optional) if omitted, the merger **derives** a numeric row per `configurations` entry from `k` and `resource` in `autoconfig/utils/feature_merger.py`.
 
-uses the **built-in catalog** wired into `cmd_config` in `autoconfig/cli.py`. For **explicit** catalog selection or **CPU/memory/GPU**-based simple catalogs, use the pipeline script:
+**Merged vector — configuration block (12 numbers):**  
+`conf_memory_limit`, `conf_num_threads`, `conf_cache_size`, `conf_batch_size`, `conf_io_buffer_size`, `conf_num_workers`, `conf_timeout`, `conf_enable_index`, `conf_index_type`, `conf_compression_enabled`, **`conf_grid_size`**, **`conf_block_size`**.  
+Resource fields `grid_size` / `block_size` map to the last two; use `0` when there is no GPU / no launch grid.
 
-```bash
-python experiments/scripts/step3_system_config.py --help
-```
+**Typical combined merge width: 8 + 12 + 17 + 12 = 49** (static + symbolic + graph + config).
 
-## Option 1: Default catalog (quick test)
+---
 
-```bash
-python experiments/scripts/step3_system_config.py \
-  -n 10 -o out/config.yaml --use-default-catalog
-```
+## Sample configs via Latin Hypercube: `data/conf/build_ten_conf.py`
 
-Uses the built-in cloud-like instance table (multiple CPU/GPU shapes).
+The script **Latin-hypercube samples** 8 unit dimensions, maps them to integer
+ranges, and enforces **GPU vs CPU** consistency:
 
-## Option 2: Command-line resource shape (recommended for custom single shapes)
+- If **`num_gpus == 0`** then **`grid_size == 0`** and **`block_size == 0`**.
+- If **`num_gpus > 0`** then **both** `grid_size` and `block_size` are **positive**
+  (and optional `gpu_memory_gb`, `gpu_sm_count` are set).
 
-```bash
-# CPU and memory (required together for simple catalog)
-python experiments/scripts/step3_system_config.py -n 10 -o out/config.yaml \
-  --cpu 16 --memory 64
-
-# Add GPUs
-python experiments/scripts/step3_system_config.py -n 10 -o out/config.yaml \
-  --cpu 32 --memory 128 --gpu 4 --gpu-memory 32
-
-# All optional knobs
-python experiments/scripts/step3_system_config.py -n 10 -o out/config.yaml \
-  --cpu 32 --memory 128 --gpu 4 --gpu-memory 32 --storage 2000
-```
-
-**Parameters**
-
-- `--cpu` — cores per instance (use with `--memory`)
-- `--memory` — RAM (GB) per instance
-- `--gpu` — GPU count (default `0`)
-- `--gpu-memory` — GPU memory (GB)
-- `--storage` — storage (GB); default scales with memory if omitted
-- `-n` — number of samples
-
-**Behavior:** the generator typically builds a **small / base / large** trio around your base shape, then LHS-samples `k` (instances) within `[k_min, k_max]`.
-
-## Option 3: Custom resource-catalog YAML
+A tunable fraction of rows use the **GPU** branch (see `--gpu-fraction`); the rest
+are CPU-only. Default hardware ranges (all overridable) include
+`cpu_cores` 1–64, `memory_gb` 1–128, `grid`/`block` 1–256, etc.
 
 ```bash
-python experiments/scripts/step3_system_config.py \
-  -n 20 -o out/config.yaml --resource-catalog my_resources.yaml
+# Write data/conf/conf_01.yaml … conf_10.yaml
+python data/conf/build_ten_conf.py -n 10 --seed 42
+
+# Custom ranges / count
+python data/conf/build_ten_conf.py -n 20 --cpu-max 32 --mem-max 64 --grid-max 256 --gpu-fraction 0.4
 ```
 
-**Example `my_resources.yaml`**
+Copy or symlink one of the generated files to your pipeline output name (e.g. `out/config_features.yaml`) before merge.
 
-```yaml
-resources:
-  - cpu_cores: 8
-    memory_gb: 32
-    storage_gb: 200
-    num_gpus: 0
+---
 
-  - cpu_cores: 16
-    memory_gb: 64
-    storage_gb: 500
-    num_gpus: 1
-    gpu_memory_gb: 16
-
-  - cpu_cores: 32
-    memory_gb: 128
-    storage_gb: 1000
-    num_gpus: 4
-    gpu_memory_gb: 32
-```
-
-## Worked examples
-
-### CPU-only cluster
+## Running merge
 
 ```bash
-python experiments/scripts/step3_system_config.py -n 10 -o out/config_cpu.yaml \
-  --cpu 16 --memory 64
+autoconfig merge -q out/query_features.yaml -g out/graph_features.yaml -c your_config.yaml -o out/merged_features.yaml
 ```
 
-### GPU server
-
-```bash
-python experiments/scripts/step3_system_config.py -n 20 -o out/config_gpu.yaml \
-  --cpu 32 --memory 128 --gpu 4 --gpu-memory 32
-```
-
-### End-to-end with merge
-
-```bash
-autoconfig query --input data/queries/kernel_bfs.cu -o out/query.yaml
-autoconfig graph --input data/graph_medium_pl.csv -o out/graph.yaml
-python experiments/scripts/step3_system_config.py -n 10 -o out/config.yaml \
-  --cpu 32 --memory 128 --gpu 4 --gpu-memory 32
-autoconfig merge -q out/query.yaml -g out/graph.yaml -c out/config.yaml -o out/merged.yaml
-```
-
-## Output format (sketch)
-
-```yaml
-configurations:
-  - config_id: 0
-    k: 6
-    resource:
-      cpu_cores: 32
-      memory_gb: 128
-      storage_gb: 1000
-      num_gpus: 4
-      gpu_memory_gb: 32
-config_features:
-  - conf_k_instances: 6
-    conf_total_cpu_cores: 192
-    ...
-metadata:
-  num_samples: 10
-  k_range: [1, 16]
-  sampling_method: latin_hypercube
-```
-
-## FAQ
-
-**What is `-n`?** Short for `--num-samples`: number of `(k, resource)` candidates.
-
-**How do I bound `k`?** `--k-min` and `--k-max` on `step3_system_config.py`.
-
-**Why three resource shapes with `--cpu`/`--memory`?** To let LHS explore scale around your baseline.
-
-**Only one hardware class?** Put a **single** entry in `resources:` and pass `--resource-catalog` so only `k` varies.
-
-## Command reference (`step3_system_config.py`)
-
-```
--n, --num-samples       Number of configurations
--o, --output            Output YAML
---resource-catalog, -c  Catalog YAML
---use-default-catalog   Built-in catalog
---cpu / --memory        Simple catalog (use together)
---gpu, --gpu-memory, --storage
---k-min, --k-max        Instance count range
-```
-
-## Sample shell script
-
-```bash
-#!/usr/bin/env bash
-OUT="results"
-mkdir -p "$OUT"
-
-python experiments/scripts/step3_system_config.py -n 10 -o "$OUT/config_cpu.yaml" \
-  --cpu 16 --memory 64 --k-min 1 --k-max 8
-
-python experiments/scripts/step3_system_config.py -n 15 -o "$OUT/config_gpu.yaml" \
-  --cpu 32 --memory 128 --gpu 4 --gpu-memory 32 --k-min 1 --k-max 4
-
-python experiments/scripts/step3_system_config.py -n 20 -o "$OUT/config_large.yaml" \
-  --use-default-catalog --k-min 2 --k-max 16
-```
-
-## Capacity YAML under `data/conf/`
-
-Files such as `system_capacity_small.yaml` document **cluster-wide limits** (total CPU, memory, GPUs, per-machine caps). They are useful when designing experiments or extending generators to respect capacity; see [data/conf/README.md](../data/conf/README.md).
+For full field lists and naming, see [feature_extraction.md](feature_extraction.md).

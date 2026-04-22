@@ -6,7 +6,7 @@ End-to-end feature workflow:
 
 1. **Query** — static + symbolic templates from source
 2. **Graph** — structure and partition statistics
-3. **Config** — LHS samples over a resource catalog
+3. **Config** — author `config_features.yaml`, or use `data/conf/build_ten_conf.py` (LHS samples)
 4. **Merge** — instantiate symbols and build the numeric matrix
 
 ```
@@ -41,11 +41,7 @@ autoconfig graph --input data/partitions/ --output out/graph_features.yaml
 
 ### 3. Configurations
 
-```bash
-autoconfig config --num-samples 20 --output out/config_features.yaml
-```
-
-For catalogs and `--cpu` / `--memory`, use `experiments/scripts/step3_system_config.py` ([CONFIG_GUIDE.md](CONFIG_GUIDE.md)).
+Author a YAML for merge, or run `python data/conf/build_ten_conf.py` (see [CONFIG_GUIDE.md](CONFIG_GUIDE.md)).
 
 ### 4. Merge
 
@@ -64,21 +60,21 @@ autoconfig merge \
 ```bash
 autoconfig query --input data/queries/kernel_bfs.cu --output out/query.yaml
 autoconfig graph --input data/graph_medium_pl.csv --output out/graph.yaml
-python experiments/scripts/step3_system_config.py -n 3 -o out/config.yaml --use-default-catalog
+# e.g. python data/conf/build_ten_conf.py -n 10  →  use one file as out/config.yaml
 autoconfig merge -q out/query.yaml -g out/graph.yaml -c out/config.yaml -o out/merged.yaml
 ```
 
 ---
 
-## Feature groups (typical 47-D merge)
+## Feature groups (typical 49-D merge)
 
 | Group | Count | Role |
 |-------|-------|------|
 | Static | 8 | Query structure |
 | Symbolic | 12 | Templates → numeric at merge |
 | Graph | 17 | Graph / partition |
-| Config | 10 | Resources |
-| **Total** | **47** | |
+| Config | 12 | Resources + `conf_grid_size` / `conf_block_size` |
+| **Total** | **49** | |
 
 Symbolic instantiation examples (conceptual):
 
@@ -98,7 +94,6 @@ Symbolic instantiation examples (conceptual):
 ```python
 from autoconfig.utils.query_feature_extractor import QueryFeatureExtractor
 from autoconfig.utils.graph_feature_extractor import GraphFeatureExtractor
-from autoconfig.utils.config_generator import ConfigGenerator, generate_default_catalog
 from autoconfig.utils.feature_merger import FeatureMerger  # merge_all loads YAML paths
 
 query_ext = QueryFeatureExtractor()
@@ -107,15 +102,11 @@ query_features = query_ext.extract_from_file("data/queries/kernel_bfs.cu")
 graph_ext = GraphFeatureExtractor()
 graph_features = graph_ext.extract_single("data/edges.csv")
 
-catalog = generate_default_catalog()
-gen = ConfigGenerator(catalog)
-config_bundle = gen.generate(20, (1, 16))
-
 merger = FeatureMerger()
 merged = merger.merge_all(
     "out/query.yaml",
     "out/graph.yaml",
-    "out/config.yaml",
+    "out/config.yaml",  # you author this
 )
 import numpy as np
 X = np.array(merged["feature_matrix"])
@@ -154,7 +145,7 @@ See [api_reference.md](api_reference.md) for `FeatureManager`, `BayesianExecutio
 
 **Why not instantiate symbols in step 1?** The same query can run on many graphs; decoupling keeps one query YAML reusable until merge.
 
-**Custom catalogs?** Pass `--resource-catalog` to `step3_system_config.py`.
+**Config file?** [CONFIG_GUIDE.md](CONFIG_GUIDE.md) describes the expected YAML for merge.
 
 **Change feature order?** Adjust `FeatureMerger` ordering (and any downstream models).
 

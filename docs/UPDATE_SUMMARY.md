@@ -22,11 +22,11 @@ Helper: `PartitionQualityMetrics`.
 
 ## 4. Feature manager (`feature_manager.py`)
 
-Orchestrates the pipeline; typical merged width **47** (8 + 12 + 17 + 10).
+Orchestrates the pipeline; typical merged width **49** (8 + 12 + 17 + 12) when using `FeatureMerger` with `conf_grid_size` / `conf_block_size`.
 
 ## 5. Config extractor (`config_extractor.py`)
 
-Ten configuration scalars (memory, threads, cache, batching, I/O, indexing, compression, timeout, …).
+The merge path uses **twelve** configuration scalars (see `feature_merger.py`); the older `config_extractor` path may still expose 10.
 
 ## Files touched
 

@@ -20,8 +20,8 @@ import argparse
 import yaml
 import numpy as np
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
-import csv
+from typing import Dict, Any, List, Tuple, Optional, Union
+from collections import Counter
 
 try:
     import networkx as nx
@@ -40,55 +40,60 @@ class GraphFeatureExtractor:
     - Partitioned graph (folder with multiple edge list files)
     """
     
+    # Above this size, loading the full graph into NetworkX is skipped; one streaming
+    # pass computes exact |V|, |E|, degree stats, and components, and keeps a uniform
+    # reservoir of edges for approximate diameter / clustering on a small NetworkX graph.
+    _STREAMING_SIZE_THRESHOLD = 32 * 1024 * 1024
+    
     def __init__(self):
         self.extractor = GraphPartitionExtractor()
     
+    @staticmethod
+    def _parse_edge_tokens(a: str, b: str) -> Tuple[Any, Any]:
+        def tok(x: str) -> Union[int, str]:
+            x = x.strip()
+            try:
+                return int(x)
+            except ValueError:
+                return x
+        
+        return tok(a), tok(b)
+    
+    def _parse_edge_line(self, line: str) -> Optional[Tuple[Any, Any]]:
+        line = line.strip()
+        if not line:
+            return None
+        if ',' in line:
+            parts = line.split(',')
+            if len(parts) >= 2:
+                return self._parse_edge_tokens(parts[0], parts[1])
+        parts = line.split()
+        if len(parts) >= 2:
+            return self._parse_edge_tokens(parts[0], parts[1])
+        return None
+    
     def load_edge_list(self, filepath: str) -> List[Tuple[Any, Any]]:
         """
-        Load edges from a CSV edge list file.
+        Load edges from an edge list file (comma-separated or whitespace-separated).
         
-        Expected format:
-            src,dst
-            xxx,xxx
-            ...
-        
-        Args:
-            filepath: Path to edge list CSV file
-            
-        Returns:
-            List of (source, destination) tuples
+        Recognizes optional CSV headers: src,dst / source,target / from,to / src,tgt.
         """
-        edges = []
+        edges: List[Tuple[Any, Any]] = []
+        is_first = True
         
         with open(filepath, 'r', encoding='utf-8') as f:
-            # Try to detect if there's a header
-            first_line = f.readline().strip()
-            
-            # Check if first line is header
-            if first_line.lower() in ['src,dst', 'source,target', 'from,to', 'src,tgt']:
-                # Skip header
-                pass
-            else:
-                # First line is data
-                parts = first_line.split(',')
-                if len(parts) >= 2:
-                    try:
-                        # Try to parse as numbers
-                        src, dst = parts[0], parts[1]
-                        edges.append((src, dst))
-                    except:
-                        pass
-            
-            # Read rest of file
             for line in f:
-                line = line.strip()
-                if not line:
+                raw = line.strip()
+                if not raw:
                     continue
-                
-                parts = line.split(',')
-                if len(parts) >= 2:
-                    src, dst = parts[0], parts[1]
-                    edges.append((src, dst))
+                if is_first:
+                    is_first = False
+                    if raw.lower() in ('src,dst', 'source,target', 'from,to', 'src,tgt'):
+                        continue
+                parsed = self._parse_edge_line(line)
+                if parsed is None:
+                    continue
+                edges.append(parsed)
         
         return edges
     
@@ -112,6 +117,128 @@ class GraphFeatureExtractor:
         
         return graph
     
+    def _extract_single_streaming(self, edge_file: str) -> Dict[str, Any]:
+        """Streaming extraction for edge lists too large for a full NetworkX graph."""
+        if nx is None:
+            raise ImportError("networkx is required for graph feature extraction")
+        
+        parent: Dict[Any, Any] = {}
+        rank: Dict[Any, int] = {}
+        
+        def find(x: Any) -> Any:
+            if x not in parent:
+                parent[x] = x
+                rank[x] = 0
+                return x
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+        
+        def union(x: Any, y: Any) -> None:
+            px, py = find(x), find(y)
+            if px == py:
+                return
+            if rank[px] < rank[py]:
+                px, py = py, px
+            parent[py] = px
+            if rank[px] == rank[py]:
+                rank[px] += 1
+        
+        deg: Counter = Counter()
+        n_edges = 0
+        rng = np.random.default_rng(0)
+        sample_edge_cap = 8000
+        reservoir: List[Tuple[Any, Any]] = []
+        
+        with open(edge_file, 'r', encoding='utf-8') as f:
+            is_first = True
+            for line in f:
+                raw = line.strip()
+                if not raw:
+                    continue
+                if is_first:
+                    is_first = False
+                    if raw.lower() in ('src,dst', 'source,target', 'from,to', 'src,tgt'):
+                        continue
+                parsed = self._parse_edge_line(line)
+                if parsed is None:
+                    continue
+                u, v = parsed
+                union(u, v)
+                deg[u] += 1
+                deg[v] += 1
+                n_edges += 1
+                if len(reservoir) < sample_edge_cap:
+                    reservoir.append((u, v))
+                else:
+                    j = int(rng.integers(0, n_edges))
+                    if j < sample_edge_cap:
+                        reservoir[j] = (u, v)
+        
+        n_vertices = len(deg)
+        if n_vertices == 0:
+            raise ValueError(f"No edges parsed from {edge_file}")
+        
+        deg_vals = list(deg.values())
+        avg_degree = float(np.mean(deg_vals))
+        max_degree = int(np.max(deg_vals))
+        min_degree = int(np.min(deg_vals))
+        degree_std = float(np.std(deg_vals)) if len(deg_vals) > 1 else 0.0
+        skew = max_degree / max(avg_degree, 1e-8)
+        
+        num_components = len({find(x) for x in deg.keys()})
+        density = (
+            (2.0 * n_edges) / (n_vertices * (n_vertices - 1))
+            if n_vertices > 1
+            else 0.0
+        )
+        
+        sample_graph = nx.Graph()
+        sample_graph.add_edges_from(reservoir)
+        
+        clustering = (
+            float(nx.average_clustering(sample_graph))
+            if sample_graph.number_of_edges()
+            else 0.0
+        )
+        diameter = int(self.extractor._compute_diameter(sample_graph))
+        
+        return {
+            'graph_features': {
+                'basic': {
+                    'num_vertices': int(n_vertices),
+                    'num_edges': int(n_edges),
+                    'density': float(density),
+                },
+                'degree': {
+                    'avg': float(avg_degree),
+                    'max': float(max_degree),
+                    'min': float(min_degree),
+                    'std': float(degree_std),
+                    'skew': float(skew),
+                },
+                'structure': {
+                    'diameter': diameter,
+                    'clustering_coeff': clustering,
+                    'num_components': int(num_components),
+                },
+                'partition': {
+                    'num_partitions': 1,
+                    'boundary_vertices': 0,
+                    'edge_cut_ratio': 0.0,
+                    'balance': 1.0,
+                },
+            },
+            'metadata': {
+                'input_file': str(edge_file),
+                'input_type': 'single_graph',
+                'num_edges_loaded': int(n_edges),
+                'extraction': 'streaming_single_pass',
+                'structure_reservoir_edges': int(len(reservoir)),
+            },
+        }
+    
     def extract_single(
         self,
         edge_file: str
@@ -125,6 +252,12 @@ class GraphFeatureExtractor:
         Returns:
             Dictionary of features
         """
+        fp = Path(edge_file)
+        if not fp.is_file():
+            raise FileNotFoundError(edge_file)
+        if fp.stat().st_size >= self._STREAMING_SIZE_THRESHOLD:
+            return self._extract_single_streaming(edge_file)
+        
         # Load edges
         edges = self.load_edge_list(edge_file)
         

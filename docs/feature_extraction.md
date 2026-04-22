@@ -22,7 +22,7 @@ For a runnable four-command workflow, see [FEATURE_PIPELINE.md](FEATURE_PIPELINE
 |------|------|--------|-----------------|
 | 1 | Query analysis | `query_features.yaml` | `experiments/scripts/step1_query_features.py` or `autoconfig query` |
 | 2 | Graph statistics | `graph_features.yaml` | `experiments/scripts/step2_graph_features.py` or `autoconfig graph` |
-| 3 | Config candidates | `config_features.yaml` | `experiments/scripts/step3_system_config.py` or `autoconfig config` |
+| 3 | Config candidates | `config_features.yaml` | **You** (see [CONFIG_GUIDE.md](CONFIG_GUIDE.md)) |
 | 4 | Merge & instantiate | `merged_features.yaml` | `experiments/scripts/step4_merge_features.py` or `autoconfig merge` |
 
 Step 1 writes **symbolic features as template metadata** (`format_version: 2`). Step 4 produces the **12 numeric symbolic slots** (`sym_*_coeff`, `sym_*_requires`) used by the MLP alongside static, graph, and config features.
@@ -331,8 +331,8 @@ After the merge step, the model input is a flat numeric vector:
 - Static: 8
 - Symbolic (instantiated): 12
 - Graph/Partition: 17
-- Configuration: 10
-- **Total: 47**
+- Configuration: 12 (includes `conf_grid_size`, `conf_block_size` from resource)
+- **Total: 49**
 
 ---
 
@@ -360,23 +360,17 @@ autoconfig graph \
     --output out/graph_features.yaml
 ```
 
-### Generate Configurations
+### Configurations
 
-```bash
-autoconfig config \
-    --num-samples 20 \
-    --output out/config_features.yaml \
-    --use-default-catalog \
-    --k-min 1 \
-    --k-max 16
-```
+Write `out/config_features.yaml` for merge, or generate drafts with **Latin Hypercube** sampling:
+`python data/conf/build_ten_conf.py -n 10` → `data/conf/conf_01.yaml` … (see [CONFIG_GUIDE.md](CONFIG_GUIDE.md)).
 
 ### Four scripts (from repository root)
 
 ```bash
 python experiments/scripts/step1_query_features.py -i queries/bfs.py -o out/query_features.yaml
 python experiments/scripts/step2_graph_features.py -i data/twitter_edges.csv -o out/graph_features.yaml
-python experiments/scripts/step3_system_config.py -n 20 -o out/config_features.yaml --use-default-catalog
+# create out/config_features.yaml
 python experiments/scripts/step4_merge_features.py \
   -q out/query_features.yaml -g out/graph_features.yaml -c out/config_features.yaml -o out/merged_features.yaml
 ```
@@ -387,7 +381,6 @@ python experiments/scripts/step4_merge_features.py \
 autoconfig all \
     --query queries/bfs.py \
     --graph data/twitter_edges.csv \
-    --config-n 20 \
     --output out/
 ```
 

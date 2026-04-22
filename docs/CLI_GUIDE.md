@@ -1,7 +1,7 @@
 # AutoConfig CLI guide
 
-> **Note:** `autoconfig config` currently exposes `-n`, `--k-min`, `--k-max`, and `-o` and uses the built-in default catalog. For `--resource-catalog`, `--use-default-catalog`, or `--cpu` / `--memory`, run  
-> `python experiments/scripts/step3_system_config.py --help`.
+> **Config YAML:** the main CLI does not generate configs. Use **`data/conf/build_ten_conf.py`**
+> (Latin Hypercube samples) and/or hand-authored YAML. See [CONFIG_GUIDE.md](CONFIG_GUIDE.md).
 
 ## Overview
 
@@ -9,10 +9,9 @@ AutoConfig provides CLI tools for feature extraction and related tasks:
 
 1. **query** — features from graph query **source code**
 2. **graph** — features from edge lists (single file or partition folder)
-3. **config** — configuration samples (LHS over the generator catalog)
-4. **merge** — merge query + graph + config YAML into a numeric matrix
-5. **all** — query + graph + config in one directory (no merge)
-6. **train**, **generate-data**, **recommend** — offline / online workflows
+3. **merge** — merge query + graph + config YAML into a numeric matrix
+4. **all** — query + graph in one directory (config YAML is separate; no merge)
+5. **train**, **generate-data**, **recommend** — offline / online workflows
 
 YAML outputs are usually written under `out/`.
 
@@ -117,26 +116,7 @@ Partition folders should contain multiple edge files (`*.csv`, `*.edges`, `*.txt
 
 ---
 
-## 3. Configuration generation (LHS)
-
-### Command (`autoconfig`)
-
-```bash
-autoconfig config --num-samples <N> --output <file.yaml> [--k-min A] [--k-max B]
-```
-
-### Command (full options — pipeline script)
-
-```bash
-python experiments/scripts/step3_system_config.py \
-  -n 20 -o out/config_features.yaml --use-default-catalog
-```
-
-See [CONFIG_GUIDE.md](CONFIG_GUIDE.md) for catalogs and resource YAML.
-
----
-
-## 4. Merge features
+## 3. Merge features
 
 ```bash
 autoconfig merge \
@@ -148,21 +128,20 @@ autoconfig merge \
 
 ---
 
-## 5. Full extraction (`all`)
+## 4. Full extraction (`all`)
 
-Produces `query_features.yaml`, `graph_features.yaml`, and `config_features.yaml` in one directory (merge is separate).
+Writes `query_features.yaml` and `graph_features.yaml` under the output directory. Create `config_features.yaml` yourself, then run **merge** separately.
 
 ```bash
 autoconfig all \
   --query data/queries/kernel_bfs.cu \
   --graph data/graph_medium_pl.csv \
-  --config-n 20 \
   --output out/
 ```
 
 ---
 
-## 6. Training and recommendation
+## 5. Training and recommendation
 
 ```bash
 autoconfig train --n-samples 500 --output data/models/
@@ -180,7 +159,7 @@ for f in data/queries/*.cu; do
   autoconfig query -i "$f" -o "out/queries/$(basename "$f" .cu).yaml"
 done
 autoconfig graph -i data/graph_medium_pl.csv -o out/graph.yaml
-autoconfig config -n 50 -o out/configs.yaml
+# e.g. python data/conf/build_ten_conf.py -n 10  (see CONFIG_GUIDE.md) before merge
 ```
 
 ### Inspect query workload patterns
@@ -234,9 +213,7 @@ metadata: { ... }
 
 **Invalid edge list?** Use `src,dst` with one edge per line, or omit the header.
 
-**Custom resource catalog?** Use `step3_system_config.py` with `--resource-catalog file.yaml`.
-
-**Why LHS?** Better coverage of the `(k, resource)` space with fewer samples than naive random grids.
+**Config candidates?** [CONFIG_GUIDE.md](CONFIG_GUIDE.md) and `data/conf/build_ten_conf.py` (LHS).
 
 **NumPy types in YAML?** `yaml.safe_load` typically returns plain Python numbers.
 

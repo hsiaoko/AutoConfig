@@ -68,18 +68,13 @@ autoconfig graph --input data/edges.csv --output out/graph_features.yaml
 
 ### Step 3 — System configuration
 
-```bash
-python experiments/scripts/step3_system_config.py \
-  -n 20 \
-  -o out/config_features.yaml \
-  --use-default-catalog
-```
-
-Other catalog options: `--resource-catalog path.yaml`, or `--cpu N --memory GB` for a small generated catalog. Equivalent:
+Author `out/config_features.yaml`, or generate candidate files with:
 
 ```bash
-autoconfig config --num-samples 20 --output out/config_features.yaml --use-default-catalog
+python data/conf/build_ten_conf.py -n 10
 ```
+
+See [CONFIG_GUIDE.md](CONFIG_GUIDE.md) for schema, GPU/grid constraints, and CLI options.
 
 ### Step 4 — Merge
 
@@ -108,7 +103,7 @@ autoconfig merge \
 | Query static + symbolic YAML | `autoconfig/utils/query_feature_extractor.py` |
 | Symbolic templates (`extract_symbolic_expressions`) | `autoconfig/feature_extractor/symbolic_extractor.py` |
 | Graph YAML from edge list | `autoconfig/utils/graph_feature_extractor.py` |
-| LHS config generation | `autoconfig/utils/config_generator.py` |
+| Config YAML + LHS samples | `data/conf/build_ten_conf.py`, [CONFIG_GUIDE.md](CONFIG_GUIDE.md) |
 | Merge + symbolic instantiation | `autoconfig/utils/feature_merger.py` |
 
 ## Symbolic instantiation rules (summary)

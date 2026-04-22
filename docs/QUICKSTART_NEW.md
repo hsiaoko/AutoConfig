@@ -74,8 +74,8 @@ result = recommender.recommend(
 ```bash
 autoconfig query --input query.py --output out/query.yaml
 autoconfig graph --input graph.csv --output out/graph.yaml
-autoconfig config --num-samples 20 --output out/configs.yaml
-autoconfig all --query q.py --graph g.csv --config-n 20 --output out/
+# python data/conf/build_ten_conf.py -n 10   # or author configs (CONFIG_GUIDE.md)
+autoconfig all --query q.py --graph g.csv --output out/
 ```
 
 ## Troubleshooting
