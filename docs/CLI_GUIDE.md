@@ -11,7 +11,7 @@ AutoConfig provides CLI tools for feature extraction and related tasks:
 2. **graph** — features from edge lists (single file or partition folder)
 3. **merge** — merge query + graph + config YAML into a numeric matrix
 4. **all** — query + graph in one directory (config YAML is separate; no merge)
-5. **train**, **generate-data**, **recommend** — offline / online workflows
+5. **train**, **train-merged**, **eval-merged**, **generate-data**, **recommend** — offline / online workflows
 
 YAML outputs are usually written under `out/`.
 
@@ -143,8 +143,29 @@ autoconfig all \
 
 ## 5. Training and recommendation
 
+**Synthetic-data trainer** (legacy internal feature format):
+
 ```bash
 autoconfig train --n-samples 500 --output data/models/
+```
+
+**Merged YAML trainer / evaluator** (1× `cost` + 50 inputs per file; same layout as `merge` output). Full detail: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md).
+
+```bash
+# Train; writes e.g. out/models/bayesian_cost_merged.pkl + _meta.yaml
+autoconfig train-merged --data-dir out/train --output out/models
+
+# Evaluate on a test folder; prints MAE, RMSE, MAPE, R²
+autoconfig eval-merged -m out/models/bayesian_cost_merged.pkl -d out/test
+
+# Optional: helper scripts
+# ./scripts/run_train_merged.sh
+# ./scripts/run_eval_merged.sh -m out/models/bayesian_cost_merged.pkl -d out/test
+```
+
+**Online recommendation (separate model stack in code):**
+
+```bash
 autoconfig recommend --query my_kernel.cu --graph data/graph.csv --top-n 3
 ```
 
@@ -221,6 +242,7 @@ metadata: { ... }
 
 ## See also
 
+- [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) — merged-feature train / test
 - [feature_extraction.md](feature_extraction.md) — feature definitions
 - [api_reference.md](api_reference.md) — Python API
 - [quickstart.md](quickstart.md) — short intro

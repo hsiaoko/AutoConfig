@@ -148,6 +148,65 @@ class SymbolicFeatureExtractor:
             ],
         }
 
+        # Heuristic patterns: map code structure to symbolic families without requiring
+        # explicit G.vertices() / VScan keywords. Goal: workload ≈ computational cost.
+        # - Vertex-scoped loops / vertex streaming APIs → VScan
+        # - Edge lists, neighbor loops, edge streaming APIs → EScan
+        # - Frontiers, active sets, worklists, BFS-style rounds → FScan (diameter-scaling)
+        # - Recursion / explicit depth-level expansion → RExp (degree^diameter-style)
+        # - Atomics / write_add → Atom (merged with |E|·skew for contention proxy)
+        self.heuristic_patterns = {
+            'vertex_loops': [
+                r'\bstream_vertices\s*<',
+                r'\bfor_each_vertex\s*\(',
+                r'for\s*\(\s*VertexID\s+\w+\s*=\s*[^;]+;\s*\w+\s*<\s*(?:params\.)?n_vertices\w*',
+                r'for\s*\([^)]*<\s*(?:params\.)?n_vertices_g\b',
+                r'for\s*\([^)]*<\s*(?:g|graph)\.get_num_vertices\s*\(',
+                r'\bv_idx\s*<\s*(?:params\.)?n_vertices\w*',
+                r'for\s*\(\s*[^;]+;\s*[^;]+<\s*[^;)]*max_vid\b',
+                r'for\s*\(\s*int\s+\w+\s*=\s*0\s*;\s*\w+\s*<\s*graph\.vertices\b',
+            ],
+            'edge_loops': [
+                r'\bstream_edges\s*<',
+                r'for\s*\([^)]*nbr_idx[^)]*<\s*(?:in_|out_)?degree',
+                r'for\s*\([^)]*<\s*(?:params\.)?n_edges_g\b',
+                r'for\s*\([^)]*e_idx[^)]*<\s*(?:params\.)?n_edges\w*',
+                r'\bin_edges_g\s*\[',
+                r'\bout_edges_g\s*\[',
+                r'Edge\s*&\s*e\b',
+                r'\[\s*&\s*\]\s*\(\s*Edge\s*&',
+                r'for\s*\([^)]*<\s*(?:in_offset|out_offset)_g\s*\[',
+            ],
+            'frontier_diameter': [
+                r'\bwhile\s*\(\s*!\s*\w+\s*\.\s*(?:empty|Empty)\s*\(',
+                r'\b(?:worklist|frontier|next_frontier|curr_frontier|active_set)\b',
+                r'\bqueue\s*<',  # std::queue, work queue
+                r'\b(?:in_active|out_active)_vertices\b',
+                r'\b(?:BFS|bfs|propagat(?:e|ion))\b',
+                r'while\s*\([^)]*(?:frontier|active_?set|n_active|work_size)\b[^)]*[><=!]',
+            ],
+            'recursion_diameter': [
+                r'\bvoid\s+(?:dfs|bfs|dfs_visit|bfs_visit)\b',
+                r'\b(?:int|void|bool|auto)\s+(?:dfs|bfs)\b',
+                r'\bdfs\s*\(|\bDFS\s*\(',
+                r'\bdepth\s*\+\s*1',
+                r'\blevel\s*\+\s*1',
+                r'Expand\s*\([^)]*level\s*\+\s*1',  # align with static recursive_exp
+                r'\brecursive\b',
+            ],
+            'atomic_skew': [
+                r'\bwrite_add\s*\(',
+                r'__atomic_|__sync_lock|#pragma\s+omp\s+atomic',
+            ],
+        }
+
+    def _heuristic_any(self, code: str, pattern_keys: List[str]) -> bool:
+        for key in pattern_keys:
+            for pat in self.heuristic_patterns[key]:
+                if re.search(pat, code, re.IGNORECASE | re.MULTILINE):
+                    return True
+        return False
+
     def extract_templates(
         self,
         source_code: str
@@ -293,38 +352,52 @@ class SymbolicFeatureExtractor:
     # Detection methods (without graph instantiation)
     
     def _detect_vertex_scan(self, code: str) -> bool:
-        """Detect vertex scanning patterns."""
-        for pattern in self.patterns['vertex_scan']:
+        """Detect vertex scanning: explicit API names or loops bounded by |V|."""
+        for pattern in self.patterns['vertex_scan'] + self.patterns.get(
+            'cuda_vertex_processing', []
+        ):
             if re.search(pattern, code, re.IGNORECASE):
                 return True
+        if self._heuristic_any(code, ['vertex_loops']):
+            return True
         return False
     
     def _detect_edge_scan(self, code: str) -> bool:
-        """Detect edge scanning patterns."""
-        for pattern in self.patterns['edge_scan']:
+        """Detect edge / neighbor iteration: explicit APIs or loops over |E| / adjacency."""
+        for pattern in self.patterns['edge_scan'] + self.patterns.get(
+            'cuda_edge_processing', []
+        ):
             if re.search(pattern, code, re.IGNORECASE):
                 return True
+        if self._heuristic_any(code, ['edge_loops']):
+            return True
         return False
     
     def _detect_frontier_scan(self, code: str) -> bool:
-        """Detect frontier iteration patterns."""
+        """Detect worklist / frontier / active-set iteration (diameter-scaling work)."""
         for pattern in self.patterns['frontier_scan']:
             if re.search(pattern, code, re.IGNORECASE):
                 return True
+        if self._heuristic_any(code, ['frontier_diameter']):
+            return True
         return False
     
     def _detect_recursive_exp(self, code: str) -> bool:
-        """Detect recursive expansion patterns."""
+        """Detect recursion or depth-incremental expansion (typical of degree^d cost)."""
         for pattern in self.patterns['recursive_exp']:
             if re.search(pattern, code, re.IGNORECASE):
                 return True
+        if self._heuristic_any(code, ['recursion_diameter']):
+            return True
         return False
     
     def _detect_atomic_update(self, code: str) -> bool:
-        """Detect atomic update patterns."""
+        """Detect atomics and lock-free updates (paired with |E|·skew for skewed contention)."""
         for pattern in self.patterns['atomic_update']:
             if re.search(pattern, code, re.IGNORECASE):
                 return True
+        if self._heuristic_any(code, ['atomic_skew']):
+            return True
         return False
     
     def _detect_cross_partition(self, code: str) -> bool:

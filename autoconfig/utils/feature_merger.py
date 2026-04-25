@@ -33,6 +33,8 @@ class FeatureMerger:
     
     def __init__(self):
         self.feature_order = [
+            # Placeholder for runtime cost / label (filled downstream; 0 in merge output)
+            'cost',
             # Static features (8)
             'static_loop_count',
             'static_max_loop_depth',
@@ -86,6 +88,8 @@ class FeatureMerger:
             'conf_compression_enabled',
             'conf_grid_size',
             'conf_block_size',
+            # From YAML ``catalog`` (first object with a ``price`` key); not derived from resource rows
+            'conf_price',
         ]
     
     def load_yaml(self, filepath: str) -> Dict[str, Any]:
@@ -105,7 +109,9 @@ class FeatureMerger:
         """
         gf = graph_data.get('graph_features', {})
         npart = max(1, int(gf.get('partition', {}).get('num_partitions', 1)))
-        diam = int(gf.get('structure', {}).get('diameter', 0))
+        # Allow top-level `diameter` (mirror) or legacy/flat files missing `structure`
+        raw_d = gf.get('structure', {}).get('diameter', gf.get('diameter', 0))
+        diam = int(raw_d) if raw_d is not None else 0
         if diam <= 0:
             diam = 1
         skew = float(gf.get('degree', {}).get('skew', 1.0))
@@ -164,6 +170,82 @@ class FeatureMerger:
         fc = families.get('comm', {})
         pair('comm', bnd, bool(fc.get('detected')))
 
+        return out
+
+    def symbolic_family_instantiation_detail(
+        self,
+        families: Dict[str, Any],
+        stats: Dict[str, float],
+    ) -> Dict[str, Any]:
+        """
+        Per-family: graph-instantiated values are always reported (``graph_instance_value``,
+        ``instance_expr``).         The ``sym_*_coeff`` / ``sym_*_requires`` fields match the
+        merged feature vector (after leading ``cost``): they stay zero unless ``detected`` is true in the query YAML
+        (static/symbolic extraction found that pattern in source code).
+        """
+        nv = stats.get('num_vertices', 0.0)
+        ne = stats.get('num_edges', 0.0)
+        n_v = max(1.0, stats.get('vertex_scan_factor', 1.0))
+        n_e = max(1.0, stats.get('edge_scan_factor', 1.0))
+        d_raw = int(stats.get('diameter', 1))
+        d_eff = min(max(1, d_raw), 10)
+        avg_deg = stats.get('avg_degree', 0.0)
+        skew = stats.get('skew', 1.0)
+        bnd = stats.get('boundary_degree_sum', 0.0)
+
+        def sub(fid: str, detected: bool, graph_value: float, expr: str) -> Dict[str, Any]:
+            return {
+                'detected': bool(detected),
+                'graph_instance_value': float(graph_value),
+                'instance_expr': expr,
+                'sym_' + fid + '_coeff': float(graph_value) if detected else 0.0,
+                'sym_' + fid + '_requires': 1.0 if detected else 0.0,
+            }
+
+        out: Dict[str, Any] = {}
+        fv = families.get('vscan', {})
+        out['vscan'] = sub(
+            'vscan',
+            bool(fv.get('detected')),
+            nv / n_v,
+            f'|V|/n = {int(nv)}/{int(n_v)}',
+        )
+        fe = families.get('escan', {})
+        out['escan'] = sub(
+            'escan',
+            bool(fe.get('detected')),
+            ne / n_e,
+            f'|E|/n = {int(ne)}/{int(n_e)}',
+        )
+        ff = families.get('fscan', {})
+        out['fscan'] = sub(
+            'fscan',
+            bool(ff.get('detected')),
+            float(ne),
+            f'|E| (proxy for sum_t |E_t|) = {int(ne)}',
+        )
+        fr = families.get('rexp', {})
+        rexp_val = (avg_deg ** d_eff) if avg_deg > 0 else 0.0
+        out['rexp'] = sub(
+            'rexp',
+            bool(fr.get('detected')),
+            rexp_val,
+            f'E[deg]^{d_eff} = {avg_deg}^{d_eff} (d={d_raw} clamped 1..10)',
+        )
+        fa = families.get('atom', {})
+        out['atom'] = sub(
+            'atom',
+            bool(fa.get('detected')),
+            ne * skew,
+            f'|E|*skew = {int(ne)}*{skew:.6g}',
+        )
+        fc = families.get('comm', {})
+        out['comm'] = sub(
+            'comm',
+            bool(fc.get('detected')),
+            bnd,
+            f'boundary_degree_sum = {bnd:.6g}',
+        )
         return out
 
     def _is_legacy_symbolic_flat(self, symbolic: Dict[str, Any]) -> bool:
@@ -236,11 +318,12 @@ class FeatureMerger:
     ) -> Dict[str, float]:
         """Extract graph features from loaded graph YAML."""
         gf = graph_data.get('graph_features', {})
+        diam = gf.get('structure', {}).get('diameter', gf.get('diameter', 0))
         
         return {
             'graph_num_vertices': gf.get('basic', {}).get('num_vertices', 0),
             'graph_num_edges': gf.get('basic', {}).get('num_edges', 0),
-            'graph_diameter': gf.get('structure', {}).get('diameter', 0),
+            'graph_diameter': diam,
             'graph_avg_degree': gf.get('degree', {}).get('avg', 0),
             'graph_max_degree': gf.get('degree', {}).get('max', 0),
             'graph_min_degree': gf.get('degree', {}).get('min', 0),
@@ -257,18 +340,79 @@ class FeatureMerger:
             'partition_balance': gf.get('partition', {}).get('balance', 1),
         }
     
+    def _catalog_price(self, config_data: Dict[str, Any]) -> float:
+        """``catalog`` often starts with ``{ price: <float> }``; this must be preserved in merge."""
+        for item in config_data.get("catalog") or []:
+            if isinstance(item, dict) and "price" in item:
+                return float(item["price"])
+        return 0.0
+
+    def config_scalars(self, config_data: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Flat scalars from the first ``configuration`` row (and related catalog/metadata), for
+        merged YAMLs — same idea as :meth:`graph_stats_for_symbolic_instantiation` / ``graph_scalars``.
+        """
+        out: Dict[str, float] = {}
+        out["price"] = self._catalog_price(config_data)
+        cfg0: Dict[str, Any] = {}
+        confs = config_data.get("configurations") or []
+        if confs and isinstance(confs[0], dict):
+            cfg0 = dict(confs[0])
+        if "k" in cfg0:
+            out["k"] = float(int(cfg0.get("k") or 1))
+        if cfg0.get("node_id") is not None:
+            out["node_id"] = float(cfg0.get("node_id", 0))
+        res: Dict[str, Any] = dict(cfg0.get("resource") or {})
+        if not res:
+            for item in config_data.get("catalog") or []:
+                if not isinstance(item, dict):
+                    continue
+                if any(
+                    k in item
+                    for k in ("cpu_cores", "memory_gb", "storage_gb", "num_gpus")
+                ):
+                    res = {k: v for k, v in item.items() if k != "price"}
+                    break
+        for key in (
+            "cpu_cores",
+            "memory_gb",
+            "storage_gb",
+            "num_gpus",
+            "grid_size",
+            "block_size",
+            "gpu_memory_gb",
+        ):
+            v = res.get(key)
+            if v is not None:
+                out[key] = float(v)
+        meta = config_data.get("metadata") or {}
+        if meta.get("sample_index") is not None:
+            out["sample_index"] = float(meta["sample_index"])
+        cp = meta.get("cloud_pricing") or {}
+        for key in ("list_price_usd_per_hour", "estimated_monthly_usd_730h"):
+            v = cp.get(key)
+            if v is not None:
+                out[key] = float(v)
+        return out
+
     def extract_config_features(
         self,
         config_data: Dict[str, Any]
     ) -> List[Dict[str, float]]:
         """Extract config features from loaded config YAML."""
+        price = self._catalog_price(config_data)
         config_features = config_data.get('config_features', [])
         if not config_features:
             configs = config_data.get("configurations") or []
             if not configs:
-                return [self._config_to_features({})]
-            return [self._config_to_features(c) for c in configs]
-        return [self._config_to_features(cf) for cf in config_features]
+                rows = [self._config_to_features({})]
+            else:
+                rows = [self._config_to_features(c) for c in configs]
+        else:
+            rows = [self._config_to_features(cf) for cf in config_features]
+        for r in rows:
+            r["conf_price"] = price
+        return rows
     
     def _config_to_features(
         self,
@@ -321,6 +465,7 @@ class FeatureMerger:
         symbolic = query_features.get('query_features', {}).get('symbolic', {})
         graph_stats = self.graph_stats_for_symbolic_instantiation(graph_features)
         symbolic_instantiated = self.instantiate_symbolic(symbolic, graph_stats)
+        graph_block = self.extract_graph_features(graph_features)
         
         # Build merged features for each configuration
         feature_vectors = []
@@ -329,8 +474,10 @@ class FeatureMerger:
             merged = {}
             merged.update(static)
             merged.update(symbolic_instantiated)
+            merged.update(graph_block)
             merged.update(graph_stats)
             merged.update(cf)
+            merged['cost'] = 0.0
             
             # Create feature vector in correct order
             vector = []
@@ -339,7 +486,10 @@ class FeatureMerger:
             
             feature_vectors.append(vector)
         
-        return np.array(feature_vectors, dtype=np.float64), self.feature_order.copy()
+        return (
+            np.array(feature_vectors, dtype=np.float64),
+            self.feature_order.copy(),
+        )
     
     def merge_all(
         self,
@@ -372,11 +522,22 @@ class FeatureMerger:
             graph_data,
             config_features
         )
+        graph_stats = self.graph_stats_for_symbolic_instantiation(graph_data)
+        sym_block = query_data.get('query_features', {}).get('symbolic', {})
+        sym_families = sym_block.get('families', {})
+        symbolic_detail: Dict[str, Any] = {}
+        if sym_families:
+            symbolic_detail = self.symbolic_family_instantiation_detail(
+                sym_families, graph_stats
+            )
         
         # Build result
         result = {
             'feature_matrix': feature_matrix.tolist(),
             'feature_names': feature_names,
+            'config_scalars': self.config_scalars(config_data),
+            'graph_scalars': graph_stats,
+            'symbolic_families_instantiation': symbolic_detail,
             'metadata': {
                 'num_samples': len(config_features),
                 'num_features': len(feature_names),
@@ -385,10 +546,11 @@ class FeatureMerger:
                 'config_file': str(config_file),
             },
             'feature_groups': {
+                'cost': 1,
                 'static': 8,
                 'symbolic': 12,
                 'graph': 17,
-                'config': 12,
+                'config': 13,
             }
         }
         

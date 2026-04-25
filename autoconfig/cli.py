@@ -15,6 +15,8 @@ Usage:
 
     # Offline training
     autoconfig train --n-samples 500 --output data/models/
+    autoconfig train-merged --data-dir out/train --output out/models/
+    autoconfig eval-merged --model out/models/bayesian_cost_merged.pkl --data-dir out/test
     autoconfig generate-data --n-samples 200 --output data/generated/
 
     # Online recommendation
@@ -96,6 +98,67 @@ def cmd_train(args):
     print(f"  Time Model - Train R²: {metrics['time_model']['train_r2']:.4f}, Test R²: {metrics['time_model']['test_r2']:.4f}")
     print(f"  Cost Model - Train R²: {metrics['cost_model']['train_r2']:.4f}, Test R²: {metrics['cost_model']['test_r2']:.4f}")
     print(f"  Models saved to: {args.output}")
+
+
+def cmd_train_merged(args):
+    """Train Bayesian cost regressor on merged feature YAMLs (Y=cost, X=other features)."""
+    from .offline.yaml_feature_trainer import train_bayesian_cost_from_merged_yamls
+
+    print("=" * 60)
+    print("Training Bayesian cost model (merged feature YAMLs)")
+    print("=" * 60)
+
+    train_bayesian_cost_from_merged_yamls(
+        args.data_dir,
+        args.output,
+        test_split=args.test_split,
+        seed=args.seed,
+        pattern=args.pattern,
+        model_basename=args.model_basename,
+        exclude_static=args.exclude_static,
+        exclude_symbolic=args.exclude_symbolic,
+        verbose=True,
+    )
+    print(f"\nModel and metadata written under: {args.output}")
+
+
+def cmd_eval_merged(args):
+    """Evaluate a merged-feature cost model; print (and optional save) metrics."""
+    import yaml
+    from .offline.yaml_feature_trainer import evaluate_bayesian_cost_on_merged_dir
+
+    result = evaluate_bayesian_cost_on_merged_dir(
+        args.model,
+        args.data_dir,
+        pattern=args.pattern,
+        check_feature_names=not args.no_check_feature_names,
+    )
+    m = result["metrics"]
+    print("=" * 60)
+    print("Eval (merged feature YAMLs, target = cost)")
+    print("=" * 60)
+    print(f"  model:      {result['model_path']}")
+    print(f"  data_dir:   {result['data_dir']}")
+    print(f"  pattern:    {result['pattern']}")
+    print(f"  n_samples:  {result['n_samples']}")
+    print("  --- metrics ---")
+    print(f"  MAE:        {m['mae']:.6f}")
+    print(f"  RMSE:       {m['rmse']:.6f}")
+    print(f"  MAPE (%):   {m['mape']:.4f}")
+    print(f"  R²:         {m['r2']:.6f}")
+    if args.show_per_file:
+        print("  --- per file ---")
+        for row in result["per_file"]:
+            print(
+                f"  {row['y_true']:.4f}  pred={row['y_pred']:.4f}  "
+                f"abs_err={row['abs_error']:.4f}  {row['file']}"
+            )
+    if args.output:
+        out_path = Path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(result, f, sort_keys=False, allow_unicode=True)
+        print(f"  Full result written to: {out_path}")
 
 
 def cmd_generate_data(args):
@@ -278,6 +341,8 @@ Examples:
 
   # Training
   autoconfig train --n-samples 500 --output data/models/
+  autoconfig train-merged --data-dir out/train --output out/models/
+  autoconfig eval-merged -m out/models/bayesian_cost_merged.pkl -d out/test
   autoconfig generate-data --n-samples 200 --output data/generated/
 
   # Recommendation
@@ -305,6 +370,83 @@ Examples:
     train_parser.add_argument('--dataset', type=str, default=None, help='Existing dataset path')
     train_parser.add_argument('--output', '-o', default='data/models/', help='Output directory for models')
     train_parser.set_defaults(func=cmd_train)
+
+    train_merged_parser = subparsers.add_parser(
+        'train-merged',
+        help='Train Bayesian cost model on merged YAMLs (target = cost, inputs = other features)',
+    )
+    train_merged_parser.add_argument(
+        '--data-dir', '-d', required=True,
+        help='Directory of merged feature YAML files (e.g. out/train)',
+    )
+    train_merged_parser.add_argument(
+        '--output', '-o', default='out/models',
+        help='Directory to save model pickle and metadata YAML',
+    )
+    train_merged_parser.add_argument(
+        '--test-split', type=float, default=0.2,
+        help='Fraction held out for test metrics (0 = train on all)',
+    )
+    train_merged_parser.add_argument('--seed', type=int, default=42, help='Shuffle seed for split')
+    train_merged_parser.add_argument(
+        '--pattern', type=str, default='*.yaml',
+        help='Glob under data-dir (e.g. "*_gridgraph_wcc.yaml")',
+    )
+    train_merged_parser.add_argument(
+        '--model-basename', type=str, default='bayesian_cost_merged',
+        help='Basename for .pkl and _meta.yaml files',
+    )
+    train_merged_parser.add_argument(
+        '--exclude-static',
+        action='store_true',
+        help='Drop static program features (static_*) from merged X',
+    )
+    train_merged_parser.add_argument(
+        '--exclude-symbolic',
+        action='store_true',
+        help='Drop graph-parameterized symbolic features (sym_*) from merged X',
+    )
+    train_merged_parser.set_defaults(func=cmd_train_merged)
+
+    eval_merged_parser = subparsers.add_parser(
+        "eval-merged",
+        help="Evaluate Bayesian cost model on a folder of merged feature YAMLs",
+    )
+    eval_merged_parser.add_argument(
+        "--model",
+        "-m",
+        required=True,
+        help="Path to trained .pkl (e.g. out/models/bayesian_cost_merged.pkl)",
+    )
+    eval_merged_parser.add_argument(
+        "--data-dir",
+        "-d",
+        required=True,
+        help="Folder with merged feature YAMLs (ground-truth cost in first feature slot)",
+    )
+    eval_merged_parser.add_argument(
+        "--pattern",
+        type=str,
+        default="*.yaml",
+        help="Glob under data-dir (same as training)",
+    )
+    eval_merged_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        help="Write full result (metrics + per_file) to this YAML",
+    )
+    eval_merged_parser.add_argument(
+        "--show-per-file",
+        action="store_true",
+        help="Print y_true, y_pred, abs_error for each file",
+    )
+    eval_merged_parser.add_argument(
+        "--no-check-feature-names",
+        action="store_true",
+        help="Do not require feature_names to match model meta (dim must still match)",
+    )
+    eval_merged_parser.set_defaults(func=cmd_eval_merged)
 
     # Generate data command
     gen_parser = subparsers.add_parser('generate-data', help='Generate synthetic training data')

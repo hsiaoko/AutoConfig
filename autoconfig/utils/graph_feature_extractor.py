@@ -226,9 +226,12 @@ class GraphFeatureExtractor:
                 'partition': {
                     'num_partitions': 1,
                     'boundary_vertices': 0,
+                    'boundary_degree_sum': 0.0,
                     'edge_cut_ratio': 0.0,
                     'balance': 1.0,
                 },
+                # Mirror of structure.diameter for tools that read a flat `diameter` key
+                'diameter': int(diameter),
             },
             'metadata': {
                 'input_file': str(edge_file),
@@ -291,9 +294,11 @@ class GraphFeatureExtractor:
                 'partition': {
                     'num_partitions': 1,
                     'boundary_vertices': 0,
+                    'boundary_degree_sum': 0.0,
                     'edge_cut_ratio': 0.0,
                     'balance': 1.0,
-                }
+                },
+                'diameter': int(features[2]),
             },
             'metadata': {
                 'input_file': str(edge_file),
@@ -405,7 +410,8 @@ class GraphFeatureExtractor:
                             global_graph, partition_vertices
                         )
                     ),
-                }
+                },
+                'diameter': int(features[2]),
             },
             'partition_info': {
                 str(i): {

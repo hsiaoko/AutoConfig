@@ -9,5 +9,6 @@
 | [CONFIG_GUIDE.md](CONFIG_GUIDE.md) | Config YAML for merge; LHS helper `data/conf/build_ten_conf.py` |
 | [api_reference.md](api_reference.md) | Classes and functions |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
+| [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) | **Train / test** merged-feature YAMLs (`train-merged`, `eval-merged`, scripts) |
 
 The repository **[README.md](../README.md)** at the project root has installation, quick start, and links here.
