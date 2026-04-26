@@ -66,15 +66,17 @@ autoconfig merge -q out/query.yaml -g out/graph.yaml -c out/config.yaml -o out/m
 
 ---
 
-## Feature groups (typical 49-D merge)
+## Feature groups (merge output per group)
 
 | Group | Count | Role |
 |-------|-------|------|
 | Static | 8 | Query structure |
 | Symbolic | 12 | Templates → numeric at merge |
 | Graph | 17 | Graph / partition |
-| Config | 12 | Resources + `conf_grid_size` / `conf_block_size` |
-| **Total** | **49** | |
+| Config | 13 | Resources + `conf_grid_size` / `conf_block_size` + **`conf_price`** |
+| **Subtotal (Φ block)** | **50** | |
+| + `price`, `time`, `cost` | 3 | Leading scalars in **53-D** batch / `FeatureMerger` rows |
+| **Total (training YAMLs)** | **53** | |
 
 Symbolic instantiation examples (conceptual):
 
@@ -86,6 +88,17 @@ Symbolic instantiation examples (conceptual):
 | RExp | 1.0 | avg degree, diameter |
 | Atom | 1.0 | \|E\|, skew |
 | Comm | 1.0 | boundary degrees |
+
+---
+
+## Training merged YAMLs (53-D)
+
+For directories of merged feature files (`feature_names` / `feature_vector`, length **53**), use **`autoconfig train-merged`** and **`autoconfig eval-merged`**:
+
+- **X (inputs):** features **4–53** in file order (static through `conf_price`) — the first three slots (`price`, `time`, `cost`) are **not** fed as inputs when predicting another label.
+- **Y (label):** one of those first three, selected with **`--y-axis 0|1|2`** (price / time / cost) or **`--target price|time|cost`** (`--y-axis` overrides `--target` if both are set).
+
+Full workflow, scripts, and metadata: **[TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md)**.
 
 ---
 
@@ -155,4 +168,5 @@ See [api_reference.md](api_reference.md) for `FeatureManager`, `BayesianExecutio
 
 - [CLI_GUIDE.md](CLI_GUIDE.md)
 - [feature_extraction.md](feature_extraction.md)
+- [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) — `train-merged` / `eval-merged`, `--y-axis`, batch merge + filling benchmarks
 - [api_reference.md](api_reference.md)

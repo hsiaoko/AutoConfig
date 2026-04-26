@@ -112,7 +112,9 @@ Adds assortativity and transitivity on top of structural stats similar to the qu
 
 ### `extract(config)` → 10-D vector (legacy extractor path)
 
-**`FeatureMerger`** (merge step) uses a **12-D** config block per row when building the full vector: the names above plus `conf_grid_size` and `conf_block_size` (from resource `grid_size` / `block_size`, default 0). Typical merged width: **49** (8+12+17+12).
+**`FeatureMerger`** (class `autoconfig.utils.feature_merger`) builds a **53-D** row: **`price`**, **`time`**, **`cost`**, then static (8), symbolic (12), graph/partition (17), and config (**13** scalars: twelve `conf_*` fields + **`conf_price`**). See [feature_extraction.md](feature_extraction.md) for the full name list.
+
+**Training / eval on merged YAML directories** — module `autoconfig.offline.yaml_feature_trainer`: `load_merged_feature_dir`, `train_bayesian_cost_from_merged_yamls`, `evaluate_bayesian_cost_on_merged_dir`. **X** uses **indices 3…** (features 4–53); **Y** is one of `price` / `time` / `cost` via `y_axis` or `target_name`. Constants: `MERGED_Y_AXIS_NAMES`, `MERGED_X_START_INDEX`. Details: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md).
 
 ---
 

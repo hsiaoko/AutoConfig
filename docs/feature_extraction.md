@@ -327,12 +327,16 @@ After the merge step, the model input is a flat numeric vector:
 Φ(Q, G, C) = [Φ_static(Q), Φ_sym instantiated(Q,G), Φ_graph(G), Φ_config(C)]
 ```
 
-**Dimensions (merged):**
+**Dimensions (merged) — per group (the numeric “Φ” block):**
 - Static: 8
 - Symbolic (instantiated): 12
 - Graph/Partition: 17
-- Configuration: 12 (includes `conf_grid_size`, `conf_block_size` from resource)
-- **Total: 49**
+- Configuration: 13 (12 `conf_*` resource/hyperparameters + **`conf_price`**)
+- **Subtotal: 50**
+
+For **A×B×C batch files** and **`autoconfig merge` / `FeatureMerger`’s public order**, **three** leading scalars are prepended: **`price`**, **`time`**, **`cost`** (catalog or benchmark-filled). **Full length = 53 = 3 + 50**.
+
+**Downstream training** (`autoconfig train-merged` / `eval-merged`): the model takes **X** from **positions 4–53** in each row (0-based **index `3` … `52`**) and one **Y** among positions **1–3** (see [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) for `--y-axis` and `--target`).
 
 ---
 
