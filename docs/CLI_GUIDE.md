@@ -149,7 +149,7 @@ autoconfig all \
 autoconfig train --n-samples 500 --output data/models/
 ```
 
-**Merged YAML trainer / evaluator** (1× `cost` + 50 inputs per file; same layout as `merge` output). Full detail: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md).
+**Merged YAML trainer / evaluator** (1× `cost` + 50 inputs per file; same layout as `merge` output). Full detail: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) (including `scripts/merge_abc_features.py` → `fill_merged_train_costs_from_stats.py` → `run_train_merged.sh`).
 
 ```bash
 # Train; writes e.g. out/models/bayesian_cost_merged.pkl + _meta.yaml

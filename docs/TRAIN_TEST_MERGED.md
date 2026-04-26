@@ -20,7 +20,20 @@ All files in a directory must use the **same** `feature_names` list (in the same
 
 Filling the `cost` slot for training often comes from measured runs (e.g. timings from a benchmark); for evaluation, `cost` is still required so the metrics compare prediction to truth.
 
-**Bulk fill from GridGraph `STATS.txt`:** run `scripts/fill_merged_train_costs_from_stats.py` (from the repo). It matches `out/features/conf_XX_<data>_gridgraph_<task>.yaml` to `../GridGraph/<data>_gridgraph_<task>/STATS.txt` (overridable with `--gridgraph-root`), and writes the same filenames under `out/train/`. Workloads with no `STATS.txt` are skipped; use `--strict` to fail instead.
+---
+
+## Scripts: from query/graph/config YAMLs to training
+
+| Step | Script / command | Role |
+|------|------------------|------|
+| 1. **Grid of merged feature files** (one file per `conf×graph×query`) | `python scripts/merge_abc_features.py` | **Required args:** `--query-dir`, `--graph-dir`, `--config-dir`, `--out-dir`. Produces `conf_NN_<graph>_gridgraph_<task>.yaml` with `feature_vector` and `cost=0` until filled. **Optional** `--query-stems` to only include e.g. `gridgraph_wcc` `gridgraph_pr` (see the script’s `--help`). |
+| 2. **Set `cost` from measured runs** | `python scripts/fill_merged_train_costs_from_stats.py` | Fills the first `feature_vector` value from `GridGraph/<data>_gridgraph_<task>/STATS.txt` (default: **`real`**, wall‑clock, last table column). **Default** `--gridgraph-root` = sibling `GridGraph/` next to the `AutoConfig` repo. Checks **核 / 内存(GB)** in `STATS` match `config_scalars.cpu_cores` / `memory_gb` in each YAML; use `--strict` to fail on mismatch. Set `--output-dir` to the same as `--features-dir` to **overwrite in place**, or a separate dir (e.g. `out/train/`) to copy. |
+| 3. **Train** | `scripts/run_train_merged.sh` or `autoconfig train-merged` | See the next section. |
+| 4. **Test / report** | `autoconfig eval-merged` or `scripts/run_eval_merged.sh` | Point `--data-dir` at a **held-out** folder of the same merged YAML format. |
+
+**`autoconfig merge`** (single triple: one query, one graph, one config file with possibly many rows) is an alternative to step 1 when you do not use the A×B×C batch helper.
+
+`merge_abc_features.py` is documented in its own file header; `fill_merged_train_costs_from_stats.py` is documented in its module docstring.
 
 ---
 
@@ -67,6 +80,7 @@ autoconfig train-merged --data-dir out/train --output out/models
 | `--seed` | RNG seed for the split (default `42`) |
 | `--pattern` | Glob under `data-dir` (default `*.yaml`), e.g. `*_gridgraph_wcc.yaml` to train on one kernel family only |
 | `--model-basename` | Basename for output files (default `bayesian_cost_merged`) |
+| `--n-iter` | Max **variational** steps in the Bayesian fit (default `300`; larger may refine longer before `tol` stops) |
 | `--exclude-static` | Drop static program features (names starting with `static_`), i.e. SPF |
 | `--exclude-symbolic` | Drop graph-parameterized symbolic features (names starting with `sym_`), i.e. SGF |
 
@@ -78,13 +92,14 @@ autoconfig train-merged --data-dir out/train --output out/models
 | `scripts/run_train_merged_no_sgf.sh` | `--exclude-symbolic` | `bayesian_cost_merged_no_sgf` |
 | `scripts/run_train_merged_no_pf.sh` | both flags (only **graph** + **config** columns) | `bayesian_cost_merged_no_pf` |
 
-**Shell helper** (default data/output relative to repo root; override by passing the same flags yourself):
+**Shell helper** (default: `--data-dir out/train` and `--output out/models`; all extra flags are forwarded to `autoconfig train-merged`):
 
 ```bash
 chmod +x scripts/run_train_merged.sh
 ./scripts/run_train_merged.sh
 # or
 ./scripts/run_train_merged.sh --data-dir out/train --output out/models --test-split 0
+./scripts/run_train_merged.sh --n-iter 500
 ```
 
 ---
@@ -154,6 +169,7 @@ train_bayesian_cost_from_merged_yamls(
     test_split=0.2,
     pattern="*.yaml",
     model_basename="bayesian_cost_merged",
+    n_iter=300,
     verbose=True,
 )
 
