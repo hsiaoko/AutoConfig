@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Train with Y = **price** (``--target price``). Merged files are 53-D: price, time, cost, …
-# Forwards all args to: autoconfig train-merged --target price
+# Train with Y = **price** (`y=0`, i.e. ``--y-axis 0``). Merged files are 53-D.
+# Forwards all args after: autoconfig train-merged --y-axis 0
 #
 # Usage:
 #   ./scripts/run_train_merged_price.sh
@@ -21,10 +21,10 @@ if [[ $# -eq 0 ]]; then
 fi
 
 if [[ -x "$VENV_AC" ]]; then
-  exec "$VENV_AC" train-merged --target price "$@"
+  exec "$VENV_AC" train-merged --y-axis 0 "$@"
 fi
 if [[ -x "$VENV_PY" ]]; then
-  exec "$VENV_PY" -m autoconfig.cli train-merged --target price "$@"
+  exec "$VENV_PY" -m autoconfig.cli train-merged --y-axis 0 "$@"
 fi
 
 echo "Cannot find .venv. From repo root run:" >&2

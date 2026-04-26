@@ -95,8 +95,8 @@ Symbolic instantiation examples (conceptual):
 
 For directories of merged feature files (`feature_names` / `feature_vector`, length **53**), use **`autoconfig train-merged`** and **`autoconfig eval-merged`**:
 
-- **X (inputs):** features **4–53** in file order (static through `conf_price`) — the first three slots (`price`, `time`, `cost`) are **not** fed as inputs when predicting another label.
-- **Y (label):** one of those first three, selected with **`--y-axis 0|1|2`** (price / time / cost) or **`--target price|time|cost`** (`--y-axis` overrides `--target` if both are set).
+- **X (inputs):** features **4–53** in file order (static through `conf_price`) — the first three slots are **not** used as inputs (they hold the three possible labels in the file).
+- **Y (label):** set with **`-y N`** or **`--y-axis N`** where **N = 0, 1, or 2**; which name that is (`price` / `time` / `cost`) is fixed by convention — see the table in **[TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md#label-y-in-the-cli--y----y-axis)**.
 
 Full workflow, scripts, and metadata: **[TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md)**.
 

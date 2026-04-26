@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Same as run_train_merged.sh but drops static program features (static_*), i.e. SPF.
+# Default Y = **time** (``--y-axis 1``).
 # Usage:
 #   ./scripts/run_train_merged_no_spf.sh
 #   ./scripts/run_train_merged_no_spf.sh --data-dir out/train --output out/models --test-split 0
@@ -17,10 +18,10 @@ if [[ $# -eq 0 ]]; then
 fi
 
 if [[ -x "$VENV_AC" ]]; then
-  exec "$VENV_AC" train-merged --exclude-static --model-basename bayesian_cost_merged_no_spf "$@"
+  exec "$VENV_AC" train-merged --y-axis 1 --exclude-static --model-basename bayesian_cost_merged_no_spf "$@"
 fi
 if [[ -x "$VENV_PY" ]]; then
-  exec "$VENV_PY" -m autoconfig.cli train-merged --exclude-static --model-basename bayesian_cost_merged_no_spf "$@"
+  exec "$VENV_PY" -m autoconfig.cli train-merged --y-axis 1 --exclude-static --model-basename bayesian_cost_merged_no_spf "$@"
 fi
 
 echo "Cannot find .venv. From repo root run:" >&2

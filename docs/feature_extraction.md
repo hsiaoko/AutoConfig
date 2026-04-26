@@ -336,7 +336,7 @@ After the merge step, the model input is a flat numeric vector:
 
 For **A×B×C batch files** and **`autoconfig merge` / `FeatureMerger`’s public order**, **three** leading scalars are prepended: **`price`**, **`time`**, **`cost`** (catalog or benchmark-filled). **Full length = 53 = 3 + 50**.
 
-**Downstream training** (`autoconfig train-merged` / `eval-merged`): the model takes **X** from **positions 4–53** in each row (0-based **index `3` … `52`**) and one **Y** among positions **1–3** (see [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) for `--y-axis` and `--target`).
+**Downstream training** (`autoconfig train-merged` / `eval-merged`): the model takes **X** from **positions 4–53** in each row (0-based **index `3` … `52`**) and one **Y** among positions **1–3**, selected with **`-y` / `--y-axis`** `0|1|2` (see [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md#label-y-in-the-cli--y----y-axis)).
 
 ---
 

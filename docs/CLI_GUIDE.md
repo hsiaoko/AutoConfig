@@ -149,14 +149,14 @@ autoconfig all \
 autoconfig train --n-samples 500 --output data/models/
 ```
 
-**Merged YAML trainer / evaluator** (53-D: **X** = features 4–53; **Y** = `price`, `time`, or `cost` via `--y-axis` or `--target`). Full detail: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) (including `merge_abc_features.py` → `fill_merged_train_costs_from_stats.py` → `run_train_merged.sh`).
+**Merged YAML trainer / evaluator** (53-D: **X** = features 4–53; **Y** = **`-y` / `--y-axis`** with `0|1|2` — see [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md#label-y-in-the-cli--y----y-axis)). Full detail: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) (including `merge_abc_features.py` → `fill_merged_train_costs_from_stats.py` → `run_train_merged.sh`).
 
 ```bash
-# Train (default Y = time, i.e. --y-axis 1); writes .pkl + _meta.yaml
+# Train (default Y = time = -y 1); writes .pkl + _meta.yaml
 autoconfig train-merged --data-dir out/train --output out/models
 
-# Train with Y = price (same as --target price)
-autoconfig train-merged -d out/train -o out/models --y-axis 0
+# Train with Y = price (y = 0)
+autoconfig train-merged -d out/train -o out/models -y 0
 
 # Evaluate on a test folder; prints MAE, RMSE, MAPE, R²
 autoconfig eval-merged -m out/models/bayesian_cost_merged.pkl -d out/test

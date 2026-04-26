@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Evaluate price-target model (merged YAMLs with first column ``price``).
-# Passes --target price to eval-merged. If omitted, you can also rely on *_meta.yaml from training.
+# Evaluate a model trained with Y = **price** (``--y-axis 0``).
+# Invokes: ``eval-merged --y-axis 0`` (a later ``-y`` on the command line overrides).
 #
 # Usage:
 #   ./scripts/run_eval_merged_price.sh -m out/models/price/bayesian_price_merged.pkl -d out/test/price
@@ -17,14 +17,14 @@ VENV_AC="${ROOT}/.venv/bin/autoconfig"
 VENV_PY="${ROOT}/.venv/bin/python"
 
 if [[ $# -eq 0 ]]; then
-  set -- -m out/models/price/bayesian_price_merged.pkl -d out/test/price --target price
+  set -- -m out/models/price/bayesian_price_merged.pkl -d out/test/price
 fi
 
 if [[ -x "$VENV_AC" ]]; then
-  exec "$VENV_AC" eval-merged "$@"
+  exec "$VENV_AC" eval-merged --y-axis 0 "$@"
 fi
 if [[ -x "$VENV_PY" ]]; then
-  exec "$VENV_PY" -m autoconfig.cli eval-merged "$@"
+  exec "$VENV_PY" -m autoconfig.cli eval-merged --y-axis 0 "$@"
 fi
 
 echo "Cannot find .venv. From repo root run:" >&2

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Evaluate: model (.pkl) + test folder of merged feature YAMLs → metrics to stdout.
+#
+# **Y (label):** Omit ``-y`` / ``--y-axis`` → ``eval-merged`` uses ``y_axis`` (or legacy ``target`` string)
+# from ``<model_stem>_meta.yaml``; if missing, defaults to **y=1** (time). Override: ``-y 0|1|2``.
+#
 # Usage:
 #   ./scripts/run_eval_merged.sh -m out/models/bayesian_cost_merged.pkl -d out/test
-#   ./scripts/run_eval_merged.sh -m out/models/bayesian_cost_merged.pkl -d out/train -o out/eval_result.yaml
-#   ./scripts/run_eval_merged.sh   # uses defaults: model + data-dir out/test (edit if you need)
+#   ./scripts/run_eval_merged.sh -m model.pkl -d out/test --y-axis 1   # force label = time
+#   ./scripts/run_eval_merged.sh   # no args → default paths below (Y from meta is typical)
 
 set -euo pipefail
 
