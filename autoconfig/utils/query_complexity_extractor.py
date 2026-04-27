@@ -1,8 +1,8 @@
 """
 Query Complexity Extractor
 
-Extracts query complexity features from .cu/.cpp source files.
-Used for configuration recommendation.
+Extracts query complexity features from .cu/.cpp source files
+(v_scan, e_scan, f_scan, atomic, sync — workload / analysis).
 
 Complexity features:
 - v_scan: Vertex scan operations (iterating over all vertices)

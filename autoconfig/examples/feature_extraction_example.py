@@ -15,6 +15,7 @@ from autoconfig.feature_extractor import (
     GraphPartitionExtractor,
     FeatureManager,
 )
+from autoconfig.feature_extractor.config_extractor import DEFAULT_CONFIG_BATCH_SIZE
 
 
 # Example query code: Subgraph isomorphism (from the paper)
@@ -199,7 +200,7 @@ def example_full_pipeline():
         'memory_limit': 8192,
         'num_threads': 4,
         'cache_size': 1024,
-        'batch_size': 1000,
+        'batch_size': DEFAULT_CONFIG_BATCH_SIZE,
         'io_buffer_size': 64,
         'num_workers': 2,
         'timeout': 300,
@@ -247,7 +248,7 @@ def example_compare_queries():
         'memory_limit': 8192,
         'num_threads': 4,
         'cache_size': 1024,
-        'batch_size': 1000,
+        'batch_size': DEFAULT_CONFIG_BATCH_SIZE,
         'io_buffer_size': 64,
         'num_workers': 2,
         'timeout': 300,

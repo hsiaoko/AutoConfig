@@ -1,70 +1,39 @@
 """
-AutoConfig - Graph Query Configuration System
+AutoConfig — graph query features, config merge, and merged 53-D Bayesian training.
 
-This package provides tools for:
-1. Feature Extraction: Extract static, symbolic, and graph features
-2. Offline Training: Generate data and train Bayesian models
-3. Online Recommendation: Predict cost and recommend optimal configurations
+**Tools (by stage)**
 
-Subsystems:
-- feature_extractor: Query, graph, and config feature extraction
-- offline: Data generation, model training, registry
-- online: Cost prediction, optimization, recommendation
-- models: Bayesian time and cost models
+- **Feature extraction:** :mod:`autoconfig.feature_extractor`, :mod:`autoconfig.utils` extractors
+- **Merge:** :class:`autoconfig.utils.feature_merger.FeatureMerger`
+- **Merged training / eval / inference:** :mod:`autoconfig.merged` (``train-merged`` / ``eval-merged`` CLI;
+  :class:`MergedBayesianPredictor` for ``bayesian_cost_merged.pkl``)
+
+Config YAML generation (e.g. LHS) lives under ``data/conf/`` as standalone scripts, not in this import graph.
 """
 
-# Feature extraction
 from .feature_extractor import (
-    StaticFeatureExtractor,
-    SymbolicFeatureExtractor,
-    GraphPartitionExtractor,
     ConfigFeatureExtractor,
     FeatureManager,
+    GraphPartitionExtractor,
+    StaticFeatureExtractor,
+    SymbolicFeatureExtractor,
 )
-
-# Models
+from .merged import MergedBayesianPredictor, load_bayesian_cost_merged
 from .models import BayesianExecutionTimeModel
-from .models.bayesian_models import BayesianTimeModel, BayesianCostModel
+from .models.bayesian_models import BayesianCostModel, BayesianTimeModel
 
-# Prediction (legacy compatibility)
-from .prediction import CostPredictor as LegacyCostPredictor
-
-# Offline training
-from .offline import DataGenerator, Trainer, ModelRegistry
-
-# Online recommendation
-from .online import (
-    CostPredictor,
-    ConfigurationOptimizer,
-    Recommender,
-)
-
-__version__ = '2.0.0'
-__author__ = 'AutoConfig Team'
+__version__ = "2.0.0"
+__author__ = "AutoConfig Team"
 
 __all__ = [
-    # Feature extraction
-    'StaticFeatureExtractor',
-    'SymbolicFeatureExtractor',
-    'GraphPartitionExtractor',
-    'ConfigFeatureExtractor',
-    'FeatureManager',
-    
-    # Models
-    'BayesianExecutionTimeModel',
-    'BayesianTimeModel',
-    'BayesianCostModel',
-    
-    # Offline
-    'DataGenerator',
-    'Trainer',
-    'ModelRegistry',
-    
-    # Online
-    'CostPredictor',
-    'ConfigurationOptimizer',
-    'Recommender',
-    
-    # Legacy compatibility
-    'LegacyCostPredictor',
+    "StaticFeatureExtractor",
+    "SymbolicFeatureExtractor",
+    "GraphPartitionExtractor",
+    "ConfigFeatureExtractor",
+    "FeatureManager",
+    "BayesianExecutionTimeModel",
+    "BayesianTimeModel",
+    "BayesianCostModel",
+    "MergedBayesianPredictor",
+    "load_bayesian_cost_merged",
 ]

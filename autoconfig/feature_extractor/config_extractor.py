@@ -6,6 +6,10 @@ Extracts features from system configuration (Conf).
 import numpy as np
 from typing import Dict, Any, List
 
+# I/O / processing batch sizes used across configs and merged features.
+CONFIG_BATCH_SIZE_CHOICES: tuple[int, ...] = (64, 128, 256, 512)
+DEFAULT_CONFIG_BATCH_SIZE: int = 256
+
 
 class ConfigFeatureExtractor:
     """
@@ -64,7 +68,9 @@ class ConfigFeatureExtractor:
         features.append(cache_size)
         
         # Batch size
-        batch_size = float(config.get('batch_size', 1000))
+        batch_size = float(
+            config.get("batch_size", DEFAULT_CONFIG_BATCH_SIZE)
+        )
         features.append(batch_size)
         
         # I/O buffer size (in KB)

@@ -20,10 +20,10 @@ For a runnable four-command workflow, see [FEATURE_PIPELINE.md](FEATURE_PIPELINE
 
 | Step | Role | Output | Module / script |
 |------|------|--------|-----------------|
-| 1 | Query analysis | `query_features.yaml` | `experiments/scripts/step1_query_features.py` or `autoconfig query` |
-| 2 | Graph statistics | `graph_features.yaml` | `experiments/scripts/step2_graph_features.py` or `autoconfig graph` |
+| 1 | Query analysis | `query_features.yaml` | `autoconfig query` |
+| 2 | Graph statistics | `graph_features.yaml` | **External** (no built-in graph CLI) |
 | 3 | Config candidates | `config_features.yaml` | **You** (see [CONFIG_GUIDE.md](CONFIG_GUIDE.md)) |
-| 4 | Merge & instantiate | `merged_features.yaml` | `experiments/scripts/step4_merge_features.py` or `autoconfig merge` |
+| 4 | Merge & instantiate | `merged_features.yaml` | `autoconfig merge` |
 
 Step 1 writes **symbolic features as template metadata** (`format_version: 2`). Step 4 produces the **12 numeric symbolic slots** (`sym_*_coeff`, `sym_*_requires`) used by the MLP alongside static, graph, and config features.
 
@@ -350,41 +350,29 @@ autoconfig query \
     --output out/query_features.yaml
 ```
 
-### Extract Graph Features
+### Graph features YAML
 
-```bash
-# Single graph
-autoconfig graph \
-    --input data/twitter_edges.csv \
-    --output out/graph_features.yaml
-
-# Partitioned graph
-autoconfig graph \
-    --input data/partitions/ \
-    --output out/graph_features.yaml
-```
+Build **`graph_features.yaml` outside this tool** (edge-list / partition stats, etc.); the schema is documented in the **Graph and partition** sections below. **merge** only consumes that file as `-g`.
 
 ### Configurations
 
 Write `out/config_features.yaml` for merge, or generate drafts with **Latin Hypercube** sampling:
 `python data/conf/build_ten_conf.py -n 10` → `data/conf/conf_01.yaml` … (see [CONFIG_GUIDE.md](CONFIG_GUIDE.md)).
 
-### Four scripts (from repository root)
+### CLI (from repository root)
 
 ```bash
-python experiments/scripts/step1_query_features.py -i queries/bfs.py -o out/query_features.yaml
-python experiments/scripts/step2_graph_features.py -i data/twitter_edges.csv -o out/graph_features.yaml
+autoconfig query  -i queries/bfs.py -o out/query_features.yaml
+# (prepare out/graph_features.yaml outside this repo's CLI)
 # create out/config_features.yaml
-python experiments/scripts/step4_merge_features.py \
-  -q out/query_features.yaml -g out/graph_features.yaml -c out/config_features.yaml -o out/merged_features.yaml
+autoconfig merge -q out/query_features.yaml -g out/graph_features.yaml -c out/config_features.yaml -o out/merged_features.yaml
 ```
 
-### All-in-one CLI
+### All-in-one CLI (query only)
 
 ```bash
 autoconfig all \
     --query queries/bfs.py \
-    --graph data/twitter_edges.csv \
     --output out/
 ```
 
@@ -395,7 +383,7 @@ autoconfig all \
 After training the model, feature importance can be analyzed:
 
 ```python
-from autoconfig import CostPredictor
+from autoconfig.prediction import CostPredictor
 
 predictor = CostPredictor()
 predictor.train(queries, graphs, configs, times)

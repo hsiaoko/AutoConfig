@@ -1,6 +1,6 @@
 # Feature YAML pipeline (four steps)
 
-This guide matches the implementation in `experiments/scripts/step1_*.py` … `step4_*.py` and the library entry points `autoconfig query|graph|config|merge`.
+This guide matches the library entry points `autoconfig query|graph|merge` (and config generation via `data/conf/build_ten_conf.py` or hand-authored YAML).
 
 ## Data flow
 
@@ -31,40 +31,12 @@ From the **repository root** (ensure the `autoconfig` package is installed: `pip
 ### Step 1 — Query features
 
 ```bash
-python experiments/scripts/step1_query_features.py \
-  -i path/to/query.py \
-  -o out/query_features.yaml
-```
-
-Equivalent:
-
-```bash
 autoconfig query --input path/to/query.py --output out/query_features.yaml
 ```
 
 ### Step 2 — Graph features
 
-Single edge-list file:
-
-```bash
-python experiments/scripts/step2_graph_features.py \
-  -i data/edges.csv \
-  -o out/graph_features.yaml
-```
-
-Partitioned graph (folder of CSV/edges files):
-
-```bash
-python experiments/scripts/step2_graph_features.py \
-  -i data/partitions/ \
-  -o out/graph_features.yaml
-```
-
-Equivalent:
-
-```bash
-autoconfig graph --input data/edges.csv --output out/graph_features.yaml
-```
+This package does **not** provide a CLI to build `graph_features.yaml` from edge lists. Produce that file with your own pipeline (schema: [feature_extraction.md](feature_extraction.md)) so **merge** can read it.
 
 ### Step 3 — System configuration
 
@@ -77,16 +49,6 @@ python data/conf/build_ten_conf.py -n 10
 See [CONFIG_GUIDE.md](CONFIG_GUIDE.md) for schema, GPU/grid constraints, and CLI options.
 
 ### Step 4 — Merge
-
-```bash
-python experiments/scripts/step4_merge_features.py \
-  -q out/query_features.yaml \
-  -g out/graph_features.yaml \
-  -c out/config_features.yaml \
-  -o out/merged_features.yaml
-```
-
-Equivalent:
 
 ```bash
 autoconfig merge \
@@ -102,7 +64,7 @@ autoconfig merge \
 |--------|----------|
 | Query static + symbolic YAML | `autoconfig/utils/query_feature_extractor.py` |
 | Symbolic templates (`extract_symbolic_expressions`) | `autoconfig/feature_extractor/symbolic_extractor.py` |
-| Graph YAML from edge list | `autoconfig/utils/graph_feature_extractor.py` |
+| Graph YAML for merge | **You provide** `graph_features.yaml` (see [feature_extraction.md](feature_extraction.md)) |
 | Config YAML + LHS samples | `data/conf/build_ten_conf.py`, [CONFIG_GUIDE.md](CONFIG_GUIDE.md) |
 | Merge + symbolic instantiation | `autoconfig/utils/feature_merger.py` |
 

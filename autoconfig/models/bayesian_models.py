@@ -44,6 +44,13 @@ class BayesianTimeModel:
         self.feature_means = None
         self.feature_stds = None
         self.is_fitted = False
+
+    @property
+    def n_input_features(self) -> int:
+        """Feature dimension of ``X`` for :meth:`fit` / :meth:`predict` (0 if not fitted)."""
+        if not self.is_fitted or self.weights is None:
+            return 0
+        return int(np.asarray(self.weights, dtype=np.float64).ravel().size)
     
     def _log_transform(self, y: np.ndarray) -> np.ndarray:
         return np.log(y + 1e-8)

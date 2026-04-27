@@ -178,7 +178,7 @@ For scripts or notebooks:
 
 ```python
 from pathlib import Path
-from autoconfig.offline.yaml_feature_trainer import (
+from autoconfig.merged import (
     load_merged_feature_dir,
     train_bayesian_cost_from_merged_yamls,
     evaluate_bayesian_cost_on_merged_dir,
@@ -210,9 +210,9 @@ print(result["metrics"])
 
 ---
 
-## Differences from `autoconfig train`
+## Inference on new merged rows
 
-The default **`autoconfig train`** subcommand uses the **legacy offline pipeline** (synthetic `DataGenerator` samples and a different feature shape). The **`train-merged` / `eval-merged`** flow is the one to use for **real merged 53-dimensional** vectors (``price``, ``time``, ``cost``, then 50 inputs) from the YAML merge pipeline.
+After training, load the pickle and optional YAML dicts with :class:`autoconfig.merged.MergedBayesianPredictor` (see [api_reference.md](api_reference.md)).
 
 ---
 

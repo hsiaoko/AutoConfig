@@ -15,7 +15,7 @@ pip install -e .
 ### 2. Run the demo driver
 
 ```bash
-python -m autoconfig.main
+# Legacy entry removed; use: autoconfig <command>  (e.g. train-merged)
 ```
 
 Example output:
@@ -36,7 +36,7 @@ Test Results:
 ### 3. Code sketch
 
 ```python
-from autoconfig import CostPredictor
+from autoconfig.prediction import CostPredictor
 import networkx as nx
 
 predictor = CostPredictor()

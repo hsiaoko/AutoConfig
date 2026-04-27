@@ -17,4 +17,4 @@ The repository **[README.md](../README.md)** at the project root has installatio
 
 - **Row layout:** `price`, `time`, `cost` (3) + static (8) + symbolic (12) + graph/partition (17) + config (13) = **53**. Same order as :class:`~autoconfig.utils.feature_merger.FeatureMerger` (`conf_price` is the last config slot).
 - **What the regressor uses:** **input X** = dimensions **4–53** (0-based index `3` onward). **Label** = one of the first three slots, chosen on the CLI with **`-y N`** / **`--y-axis N`** where **N ∈ {0,1,2}** (table: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md#label-y-in-the-cli--y----y-axis)).
-- **Read next:** [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) (options, `*_meta.yaml`, `eval-merged`). CLI entry points: [CLI_GUIDE.md](CLI_GUIDE.md) § *Training and recommendation*.
+- **Read next:** [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) (options, `*_meta.yaml`, `eval-merged`). CLI entry points: [CLI_GUIDE.md](CLI_GUIDE.md) § *Training*.

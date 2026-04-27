@@ -18,6 +18,8 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
+from ..feature_extractor.config_extractor import DEFAULT_CONFIG_BATCH_SIZE
+
 
 class FeatureMerger:
     """
@@ -29,69 +31,66 @@ class FeatureMerger:
     3. Load config features (multiple configurations)
     4. Instantiate symbolic features with graph stats
     5. Merge into complete feature vectors
+
+    **Layout (53 dimensions, fixed order):** ``price``, ``time``, ``cost``, then static (8),
+    symbolic (12), graph+partition (17), config (13, including ``conf_price`` from catalog).
+    At merge time: ``price`` and ``conf_price`` come from the config catalog, ``time`` and
+    ``cost`` are set to **0** (fill ``time`` e.g. from GridGraph ``STATS`` downstream).
     """
     
-    def __init__(self):
-        self.feature_order = [
-            # Placeholder for runtime cost / label (filled downstream; 0 in merge output)
-            'cost',
-            # Static features (8)
-            'static_loop_count',
-            'static_max_loop_depth',
-            'static_branch_count',
-            'static_variable_count',
-            'static_recursion_count',
-            'static_atomic_op_count',
-            'static_sync_count',
-            'static_explicit_parallel_flag',
-            # Symbolic features (12)
-            'sym_vscan_coeff',
-            'sym_vscan_requires',
-            'sym_escan_coeff',
-            'sym_escan_requires',
-            'sym_fscan_coeff',
-            'sym_fscan_requires',
-            'sym_rexp_coeff',
-            'sym_rexp_requires',
-            'sym_atom_coeff',
-            'sym_atom_requires',
-            'sym_comm_coeff',
-            'sym_comm_requires',
-            # Graph features (17)
-            'graph_num_vertices',
-            'graph_num_edges',
-            'graph_diameter',
-            'graph_avg_degree',
-            'graph_max_degree',
-            'graph_min_degree',
-            'graph_degree_std',
-            'graph_skew',
-            'graph_clustering_coeff',
-            'graph_num_components',
-            'partition_num_partitions',
-            'partition_boundary_vertices',
-            'partition_boundary_degree_sum',
-            'partition_avg_partition_size',
-            'partition_size_std',
-            'partition_edge_cut_ratio',
-            'partition_balance',
-            # Config features (12)
-            'conf_memory_limit',
-            'conf_num_threads',
-            'conf_cache_size',
-            'conf_batch_size',
-            'conf_io_buffer_size',
-            'conf_num_workers',
-            'conf_timeout',
-            'conf_enable_index',
-            'conf_index_type',
-            'conf_compression_enabled',
-            'conf_grid_size',
-            'conf_block_size',
-            # From YAML ``catalog`` (first object with a ``price`` key); not derived from resource rows
-            'conf_price',
-        ]
+    _STATIC = [
+        'static_loop_count',
+        'static_max_loop_depth',
+        'static_branch_count',
+        'static_variable_count',
+        'static_recursion_count',
+        'static_atomic_op_count',
+        'static_sync_count',
+        'static_explicit_parallel_flag',
+    ]
+    _SYM = [
+        'sym_vscan_coeff', 'sym_vscan_requires', 'sym_escan_coeff', 'sym_escan_requires',
+        'sym_fscan_coeff', 'sym_fscan_requires', 'sym_rexp_coeff', 'sym_rexp_requires',
+        'sym_atom_coeff', 'sym_atom_requires', 'sym_comm_coeff', 'sym_comm_requires',
+    ]
+    _GRAPH = [
+        'graph_num_vertices', 'graph_num_edges', 'graph_diameter', 'graph_avg_degree',
+        'graph_max_degree', 'graph_min_degree', 'graph_degree_std', 'graph_skew',
+        'graph_clustering_coeff', 'graph_num_components', 'partition_num_partitions',
+        'partition_boundary_vertices', 'partition_boundary_degree_sum',
+        'partition_avg_partition_size', 'partition_size_std', 'partition_edge_cut_ratio',
+        'partition_balance',
+    ]
+    _CONFIG_NO_PRICE = [
+        'conf_memory_limit', 'conf_num_threads', 'conf_cache_size', 'conf_batch_size',
+        'conf_io_buffer_size', 'conf_num_workers', 'conf_timeout', 'conf_enable_index',
+        'conf_index_type', 'conf_compression_enabled', 'conf_grid_size', 'conf_block_size',
+    ]
+    _CONF_PRICE = 'conf_price'
     
+    def __init__(self) -> None:
+        self.feature_order: List[str] = (
+            ['price', 'time', 'cost']
+            + self._STATIC
+            + self._SYM
+            + self._GRAPH
+            + self._CONFIG_NO_PRICE
+            + [self._CONF_PRICE]
+        )
+        if len(self.feature_order) != 53:
+            raise RuntimeError("internal: expected 53 feature names")
+    
+    def _feature_group_counts(self) -> Dict[str, int]:
+        return {
+            "price": 1,
+            "time": 1,
+            "cost": 1,
+            "static": 8,
+            "symbolic": 12,
+            "graph": 17,
+            "config": 13,
+        }
+
     def load_yaml(self, filepath: str) -> Dict[str, Any]:
         """Load YAML file (handling numpy types)."""
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -430,7 +429,9 @@ class FeatureMerger:
             "conf_memory_limit": k * resource.get("memory_gb", 8) * 1024,  # MB
             "conf_num_threads": k * resource.get("cpu_cores", 4),
             "conf_cache_size": k * resource.get("memory_gb", 8) * 1024 // 8,
-            "conf_batch_size": 1000,
+            "conf_batch_size": float(
+                resource.get("batch_size", DEFAULT_CONFIG_BATCH_SIZE)
+            ),
             "conf_io_buffer_size": 64,
             "conf_num_workers": k * max(1, resource.get("cpu_cores", 4) // 4),
             "conf_timeout": 300,
@@ -471,19 +472,22 @@ class FeatureMerger:
         feature_vectors = []
         
         for cf in config_features:
-            merged = {}
+            merged: Dict[str, float] = {}
             merged.update(static)
             merged.update(symbolic_instantiated)
             merged.update(graph_block)
             merged.update(graph_stats)
-            merged.update(cf)
+            catalog_price = float(cf.get("conf_price", 0.0))
+            merged['price'] = catalog_price
+            merged['time'] = 0.0
             merged['cost'] = 0.0
-            
+            merged.update(cf)
+
             # Create feature vector in correct order
             vector = []
             for name in self.feature_order:
                 vector.append(float(merged.get(name, 0.0)))
-            
+
             feature_vectors.append(vector)
         
         return (
@@ -545,13 +549,7 @@ class FeatureMerger:
                 'graph_file': str(graph_file),
                 'config_file': str(config_file),
             },
-            'feature_groups': {
-                'cost': 1,
-                'static': 8,
-                'symbolic': 12,
-                'graph': 17,
-                'config': 13,
-            }
+            'feature_groups': self._feature_group_counts(),
         }
         
         return result
