@@ -9,7 +9,7 @@
 | [CONFIG_GUIDE.md](CONFIG_GUIDE.md) | Config YAML for merge; LHS helper `data/conf/build_ten_conf.py` |
 | [api_reference.md](api_reference.md) | Classes and functions |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
-| [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) | **Train / test** on merged **53-d** YAMLs: `train-merged` / `eval-merged` — **X = 4–53**; **Y = -y 0|1|2**; **`--model-kind`** (`bayesian` / `nn` / `mlp` / `rl` stub); `merge_abc_features.py` → `fill_merged_train_costs_from_stats.py` |
+| [CONF_RECOMMEND.md](CONF_RECOMMEND.md) | **`recommend-conf`**: rank configs with a trained merged model (query + graph + candidate pool) |
 
 The repository **[README.md](../README.md)** at the project root has installation, quick start, and links here.
 

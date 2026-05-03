@@ -227,6 +227,10 @@ chmod +x scripts/run_eval_merged.sh
 ./scripts/run_eval_merged.sh -m out/models/bayesian_cost_merged.pkl -d out/test -o out/eval_report.yaml
 ```
 
+### Recommend configs from the same model
+
+To **rank candidate system configs** for **one** query YAML + **one** graph YAML (no merged grid), use **`autoconfig recommend-conf`** and the **[CONF_RECOMMEND.md](CONF_RECOMMEND.md)** guide (`scripts/run_recommend_conf.sh`).
+
 ---
 
 ## Metrics reported

@@ -11,6 +11,7 @@ AutoConfig provides CLI tools for feature extraction and related tasks:
 2. **merge** — merge query + graph + config YAML into a numeric matrix (you supply `graph_features.yaml`)
 3. **all** — write `query_features.yaml` in one directory (config / graph YAML separate)
 4. **train-merged**, **eval-merged** — merged 53-D training / evaluation
+5. **recommend-conf** — rank configuration candidates for one query + one graph using a trained merged model ([CONF_RECOMMEND.md](CONF_RECOMMEND.md))
 
 YAML outputs are usually written under `out/`.
 
@@ -130,6 +131,27 @@ autoconfig eval-merged -m out/models/bayesian_cost_merged.pkl -d out/test
 ```
 
 For **merged 53-D** models, use **MergedBayesianPredictor** in `autoconfig.merged` (see [api_reference.md](api_reference.md)). For raw code + graph + config features (no merged YAML), optionally use `autoconfig.prediction.CostPredictor`.
+
+---
+
+## 6. Recommend configuration (`recommend-conf`)
+
+After **`train-merged`**, rank **many** candidate configs for **one** task (`-q`) and **one** graph (`-g`) by predicted **`price` / `time` / `cost`** (whichever the model was trained on — read from `*_meta.yaml`).
+
+```bash
+autoconfig recommend-conf \
+  -m out/models/my_run.pkl \
+  -q out/query_features/kernel_bfs.yaml \
+  -g out/graph_features/friendster.yaml \
+  -c data/conf/gpu/ \
+  -k 5 \
+  -o out/recommended_confs
+
+# Wrapper (same CLI):
+./scripts/run_recommend_conf.sh -m out/models/my_run.pkl -q Q -g G -c data/conf/gpu/ -k 5 -o out/rec
+```
+
+**Full behavior** (config directory vs single file, `-o` directory vs summary YAML, `--refine`, Python API): **[CONF_RECOMMEND.md](CONF_RECOMMEND.md)**.
 
 ---
 

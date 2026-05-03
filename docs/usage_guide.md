@@ -96,6 +96,8 @@ For directories of merged feature files (`feature_names` / `feature_vector`, len
 
 Full workflow, scripts, and metadata: **[TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md)**.
 
+To **pick top-k system configs** for one query + one graph using the trained regressor, see **`autoconfig recommend-conf`** in **[CONF_RECOMMEND.md](CONF_RECOMMEND.md)**.
+
 ---
 
 ## Python API (extractors + merger)
@@ -163,4 +165,5 @@ See [api_reference.md](api_reference.md) for `FeatureManager`, `BayesianExecutio
 - [CLI_GUIDE.md](CLI_GUIDE.md)
 - [feature_extraction.md](feature_extraction.md)
 - [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) — `train-merged` / `eval-merged`, `--y-axis`, batch merge + filling benchmarks
+- [CONF_RECOMMEND.md](CONF_RECOMMEND.md) — `recommend-conf`: rank configs from query + graph + candidate pool
 - [api_reference.md](api_reference.md)
