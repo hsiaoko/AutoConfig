@@ -125,9 +125,8 @@ autoconfig train-merged -d out/train -o out/models -y 0
 # Evaluate on a test folder; prints MAE, RMSE, MAPE, R²
 autoconfig eval-merged -m out/models/bayesian_cost_merged.pkl -d out/test
 
-# Optional: helper scripts
-# ./scripts/run_train_merged.sh
-# ./scripts/run_eval_merged.sh -m out/models/bayesian_cost_merged.pkl -d out/test
+# Train via helper (must pass --model-basename <stem>)
+./scripts/run_train_merged.sh --model-basename bayesian_cost_full -d out/train -o out/models
 ```
 
 For **merged 53-D** models, use **MergedBayesianPredictor** in `autoconfig.merged` (see [api_reference.md](api_reference.md)). For raw code + graph + config features (no merged YAML), optionally use `autoconfig.prediction.CostPredictor`.
