@@ -110,9 +110,14 @@ autoconfig all \
 
 **Merged YAML trainer / evaluator** (53-D: **X** = features 4–53; **Y** = **`-y` / `--y-axis`** with `0|1|2` — see [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md#label-y-in-the-cli--y----y-axis)). Full detail: [TRAIN_TEST_MERGED.md](TRAIN_TEST_MERGED.md) (including `merge_abc_features.py` → `fill_merged_train_costs_from_stats.py` → `run_train_merged.sh`).
 
+**Model backend:** default is **`--model-kind bayesian`**. For a neural net use **`--model-kind nn`** (or **`mlp`**) and optional **`--model-options '{"max_iter":500,...}'`**. **`--model-kind rl`** is a stub and does not train until you register a real implementation — see [TRAIN_TEST_MERGED.md — Model backend](TRAIN_TEST_MERGED.md#model-kind).
+
 ```bash
 # Train (default Y = time = -y 1); writes .pkl + _meta.yaml
 autoconfig train-merged --data-dir out/train --output out/models
+
+# Train with a neural network (same data layout)
+autoconfig train-merged --data-dir out/train --output out/models --model-kind nn
 
 # Train with Y = price (y = 0)
 autoconfig train-merged -d out/train -o out/models -y 0
