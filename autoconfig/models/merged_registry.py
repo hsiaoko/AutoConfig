@@ -2,7 +2,7 @@
 可插拔 **merged 表格式回归** 后端注册表。
 
 * ``bayesian`` — :class:`BayesianCostModel`（默认）
-* ``mlp`` / ``nn`` — 神经网络（`MLPRegressorBackend`，两者等价，推荐 CLI 用 ``nn``）
+* ``mlp`` / ``nn`` — 神经网络（`MLPRegressorBackend`：默认对 **X**、**y** 做 ``StandardScaler`` 再训练 sklearn ``MLPRegressor``，避免 merged 特征与 ``cost`` 量级差异过大导致损失爆炸；可用 ``model_options["scale_xy"]=false`` 关闭。两者等价，推荐 CLI 用 ``nn``）
 * ``rl`` — 占位，训练会显式报错，便于以后接强化学习 / 自定义实现
 
 使用 :func:`register_model_kind` 在运行时挂接自定义类。

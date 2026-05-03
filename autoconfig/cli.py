@@ -206,6 +206,68 @@ def cmd_merge(args):
     print(f"  Feature matrix: {result['metadata']['num_samples']} samples × {result['metadata']['num_features']} features")
 
 
+def cmd_recommend_conf(args):
+    """Top-k configs by predicted cost/time/price (from train-merged model meta)."""
+    import yaml
+
+    from .conf_recommend import recommend_top_k
+    from .conf_recommend.export_configs import (
+        export_recommendations_to_dir,
+        write_recommendation_report,
+    )
+
+    r = recommend_top_k(
+        args.model,
+        query_features=args.query,
+        graph_features=args.graph,
+        config_candidates=args.config,
+        k=args.k,
+        conf_batch_size=getattr(args, "batch_size", None),
+        lower_is_better=not args.maximize,
+        local_refine=getattr(args, "refine", False),
+        refine_max_iterations=int(getattr(args, "refine_max_iterations", 10_000)),
+        refine_seed=getattr(args, "refine_seed", None),
+    )
+    print(
+        f"Model: {r.model_path}\n"
+        f"Target: {r.target_name!r} (y_axis={r.y_axis}); "
+        f"{'minimize' if r.lower_is_better else 'maximize'} predicted value; top {r.k}"
+    )
+    if r.initial_items is not None:
+        print(
+            f"Local refine: iterations={r.refine_iterations} "
+            f"stop={r.refine_stopped_reason!r}  (initial_items in each export under -o if set)"
+        )
+    print("---")
+    for it in r.items:
+        sp = f"  file={it.source_path}" if it.source_path else ""
+        print(
+            f"rank {it.rank}  idx={it.config_index}  predicted={it.predicted:.8g}{sp}"
+        )
+        print(yaml.safe_dump({"configuration": it.configuration}, default_flow_style=False))
+    if args.output:
+        outp = Path(args.output)
+        if (
+            outp.suffix.lower() in (".yaml", ".yml")
+            and (not outp.exists() or outp.is_file())
+        ):
+            write_recommendation_report(r, outp)
+            print(f"Wrote full report (single file): {outp}")
+        else:
+            paths = export_recommendations_to_dir(
+                r,
+                outp,
+                prefix=getattr(args, "export_prefix", "recommend"),
+                also_write_full_report=bool(getattr(args, "full_report", False)),
+            )
+            n_cfg = sum(1 for p in paths if "full_report" not in p.name)
+            print(f"Wrote {n_cfg} config YAML(s) under {outp.resolve()}")
+            if getattr(args, "full_report", False):
+                fr = outp / f"{getattr(args, 'export_prefix', 'recommend')}_full_report.yaml"
+                if fr.exists():
+                    print(f"  (+ full report: {fr})")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='AutoConfig — graph query features, merge, merged-model train/eval',
@@ -216,6 +278,9 @@ Examples:
   autoconfig merge -q out/query.yaml -g out/graph.yaml -c my_config.yaml -o out/merged.yaml
   autoconfig train-merged --data-dir out/train --output out/models/
   autoconfig eval-merged -m out/models/bayesian_cost_merged.pkl -d out/test
+  autoconfig recommend-conf -m out/models/bayesian_cost_merged.pkl \\
+    -q out/query.yaml -g out/graph.yaml -c out/candidates.yaml -k 5 \\
+    -o out/recommended_confs
         """
     )
 
@@ -277,7 +342,8 @@ Examples:
         default=None,
         metavar='JSON',
         help='JSON kwargs for the chosen backend, e.g. '
-        '\'{"hidden_layer_sizes":[128,64],"max_iter":400,"early_stopping":false}\' for nn/mlp',
+        '\'{"hidden_layer_sizes":[128,64],"max_iter":400,"early_stopping":false}\' for nn/mlp; '
+        'optional {"scale_xy": false} disables StandardScaler on X and y (MLP default was raw features)',
     )
     train_merged_parser.add_argument(
         '--exclude-static',
@@ -391,6 +457,96 @@ Examples:
     merge_parser.add_argument('--config', '-c', required=True, help='Config features YAML')
     merge_parser.add_argument('--output', '-o', default='out/merged_features.yaml', help='Output YAML')
     merge_parser.set_defaults(func=cmd_merge)
+
+    rec_parser = subparsers.add_parser(
+        "recommend-conf",
+        help="Rank config candidates by predicted target (same merge layout as train-merged)",
+    )
+    rec_parser.add_argument(
+        "-m",
+        "--model",
+        required=True,
+        help="Path to train-merged .pkl (sibling *_meta.yaml required)",
+    )
+    rec_parser.add_argument(
+        "-q",
+        "--query",
+        required=True,
+        help="Query (task) features YAML",
+    )
+    rec_parser.add_argument(
+        "-g",
+        "--graph",
+        required=True,
+        help="Graph features YAML",
+    )
+    rec_parser.add_argument(
+        "-c",
+        "--config",
+        required=True,
+        help="Config: single YAML (merge -c), or a **folder** of *.yaml (one conf per file, e.g. data/conf/gpu/)",
+    )
+    rec_parser.add_argument(
+        "-k",
+        "--k",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Return top-N configs by predicted value (default: 5)",
+    )
+    rec_parser.add_argument(
+        "--maximize",
+        action="store_true",
+        help="Choose largest predicted value instead of smallest (default: minimize)",
+    )
+    rec_parser.add_argument(
+        "--batch-size",
+        type=float,
+        default=None,
+        metavar="N",
+        help="Override conf_batch_size on every merged row (match training if used there)",
+    )
+    rec_parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        metavar="DIR_OR_FILE",
+        help="**Directory**: export one YAML per ranked config (recommend_rank01.yaml, …, "
+        "merge-style with metadata/catalog/configurations). "
+        "Path ending in .yaml/.yml: write a **single** summary file (to_dict) instead.",
+    )
+    rec_parser.add_argument(
+        "--export-prefix",
+        default="recommend",
+        metavar="P",
+        help="Filename prefix for files under -o directory (default: recommend)",
+    )
+    rec_parser.add_argument(
+        "--full-report",
+        action="store_true",
+        help="With -o as a directory, also write {prefix}_full_report.yaml",
+    )
+    rec_parser.add_argument(
+        "--refine",
+        action="store_true",
+        help="After top-k, random-perturb cpu±16, memory in 16GB steps, GPU grid/block ×2 or ÷2; "
+        "repeat until no lower (or higher if --maximize) prediction or --refine-max-iterations",
+    )
+    rec_parser.add_argument(
+        "--refine-max-iterations",
+        type=int,
+        default=10_000,
+        metavar="N",
+        help="Max refine rounds (default 10000); each round evaluates k perturbed configs",
+    )
+    rec_parser.add_argument(
+        "--refine-seed",
+        type=int,
+        default=None,
+        metavar="S",
+        help="RNG seed for perturbations (optional, for reproducibility)",
+    )
+    rec_parser.set_defaults(func=cmd_recommend_conf)
 
     args = parser.parse_args()
 

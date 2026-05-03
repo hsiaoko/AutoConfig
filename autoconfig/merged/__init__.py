@@ -2,6 +2,10 @@
 Merged 53-D YAML pipeline: load training tables, fit a :class:`~autoconfig.models.protocols.MergedTabularRegressor`
 (default Bayesian), evaluate on directories, and run inference via :class:`MergedBayesianPredictor`.
 
+Shell helpers ``./scripts/run_train_merged*.sh`` require an explicit ``--model-basename`` so output
+``.pkl`` / ``*_meta.yaml`` stems match the backend and experiment; calling ``autoconfig train-merged``
+directly still uses the CLI default basename when ``--model-basename`` is omitted.
+
 Used by ``autoconfig train-merged`` / ``eval-merged`` and by
 ``./scripts/run_train_merged*.sh``, ``./scripts/run_eval_merged*.sh``.
 """
