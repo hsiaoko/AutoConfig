@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Evaluate: model (.pkl) + test folder of merged feature YAMLs → metrics to stdout.
+# Backend (贝叶斯 / ``nn`` / …) 由 ``*.pkl`` 同目录的 ``*_meta.yaml`` 中 ``model_kind`` 决定，无需传 ``--model-kind``。
 #
 # **Y (label):** Omit ``-y`` / ``--y-axis`` → ``eval-merged`` uses ``y_axis`` (or legacy ``target`` string)
 # from ``<model_stem>_meta.yaml``; if missing, defaults to **y=1** (time). Override: ``-y 0|1|2``.
