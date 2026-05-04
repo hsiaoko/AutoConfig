@@ -1,6 +1,6 @@
 # Training & evaluation (merged 53-D YAML)
 
-Train a regressor on a directory of **merged** feature YAMLs and evaluate on a hold-out or separate test set. Backend is selected with **`--model-kind`**. Artifacts: `<output>/<model_basename>.pkl` and **`<model_basename>_meta.yaml`** (required for `eval-merged` and `recommend-conf`).
+Train a regressor on a directory of **merged** feature YAMLs and evaluate on a hold-out or separate test set. Backend is selected with **`--model-kind`** (**`bayesian`**, **`mlp`** / **`nn`**, **`rl`**). Artifacts: `<output>/<model_basename>.pkl` and **`<model_basename>_meta.yaml`** (required for `eval-merged` and `recommend-conf`).
 
 ## Labels & layout
 
@@ -23,15 +23,57 @@ autoconfig train-merged -h
 | `--seed` | — | no | `42` | Shuffle seed. |
 | `--pattern` | — | no | `*.yaml` | Glob under `data-dir`. |
 | `--model-basename` | — | no | `bayesian_cost_merged` | Output stem (**many shell wrappers require an explicit value** — see below). |
-| `--n-iter` | — | no | `300` | For `model-kind=bayesian`, max variational iterations; other kinds may use `--model-options`. |
-| `--model-kind` | — | no | `bayesian` | **Case-insensitive** registered kind: **`bayesian`**, **`mlp`**, **`nn`** (same as mlp), **`rl`** (placeholder — training errors). |
-| `--model-options` | — | no | `None` | **JSON object string** passed to the backend. Example: `'{"hidden_layer_sizes":[128,64],"max_iter":400,"early_stopping":false}'` (nn/mlp); `'{"scale_xy": false}'` disables `StandardScaler` on X and y for MLP. |
+| `--n-iter` | — | no | `300` | **`bayesian`**: max variational iterations (also passed as `n_iter` unless overridden in `--model-options`). **`rl`**: used as **`n_epochs`** when `n_epochs` is not set in `--model-options`. **`mlp`** / **`nn`**: ignored by the top-level flag — set e.g. **`max_iter`** in `--model-options`. |
+| `--model-kind` | — | no | `bayesian` | **Case-insensitive**: **`bayesian`**, **`mlp`**, **`nn`** (alias of mlp), **`rl`** (Gaussian policy + REINFORCE; see below). |
+| `--model-options` | — | no | `None` | **JSON object string** for the backend constructor. **MLP/NN** e.g. `'{"hidden_layer_sizes":[128,64],"max_iter":400,"early_stopping":false}'`; `'{"scale_xy":false}'` turns off `StandardScaler` on inputs (and on `y` when scaling is used). **RL** e.g. `'{"n_epochs":500,"batch_size":64,"learning_rate":0.1,"policy_std":0.35,"scale_xy":true}'`. |
 | `--exclude-static` | — | no | off (flag) | Drop `static_*` from X. |
 | `--exclude-symbolic` | — | no | off | Drop `sym_*` from X. |
 | `--full-graph-with-no-pf` | — | no | off | With static/symbolic excluded, keep full `graph_*` / `partition_*` (legacy “no_pf”); mutually exclusive with |V|/|E|-only ablations — see CLI help. |
 | `--graph-ve-only` | — | no | off | **no_graph** ablation: only `graph_num_vertices`, `graph_num_edges`. |
 | `--graph-e-only` | — | no | off | Graph block only `graph_num_edges`; often combined with `--exclude-static --exclude-symbolic --graph-ve-only` for **no_all**. |
 | `--batch-size` | — | no | `None` | Float: override each row’s **`conf_batch_size`** (I/O batch in config, not SGD mini-batch); recorded in meta. |
+
+### Where `--model-basename` and `--model-kind` are wired
+
+Those flags belong only to the **`train-merged`** subcommand (they are **not** global `autoconfig` options):
+
+| Layer | Role |
+|--------|------|
+| **CLI** | `autoconfig train-merged --model-basename <stem> --model-kind rl …` (`autoconfig train-merged -h` lists both). Definitions: **`autoconfig/cli.py`** on the `train_merged_parser` (**`--model-basename`** default stem, **`--model-kind`** backend name). |
+| **Handler** | **`cmd_train_merged`** reads `args.model_basename`, `args.model_kind`, parses **`--model-options`** JSON, then calls the training pipeline. |
+| **Library API** | **`autoconfig.merged.pipeline.train_bayesian_cost_from_merged_yamls`** kwargs **`model_basename`** and **`model_kind`** (`model_kind` selects the regressor via **`autoconfig.models.merged_registry.create_model`**). |
+| **`_meta.yaml`** | Writes **`model_kind`** into `{model_basename}_meta.yaml` next to `{model_basename}.pkl`; **`eval-merged`** / **`recommend-conf`** read that sidecar (those commands have **no** **`--model-kind`**). |
+
+**Shell wrappers** (`scripts/run_train_merged*.sh`) forward **`"$@"`** to `train-merged`, so pass the same **`--model-basename`** / **`--model-kind`** flags there—e.g. **`./scripts/run_train_merged.sh --model-basename rl_cost_run1 --data-dir … --output … --model-kind rl`** (most wrappers besides `run_train_merged.sh` / `run_train_merged_price.sh` **require** an explicit **`--model-basename`** via **`scripts/_require_model_basename.inc.sh`**).
+
+Example (direct CLI):
+
+```bash
+autoconfig train-merged -d out/train -o out/models \
+  --model-basename rl_cost_merged \
+  --model-kind rl \
+  --n-iter 400
+```
+
+## Regression backends (`--model-kind`)
+
+All kinds share the same merged **(X, y)** training API; checkpoints are **`.pkl`** (Bayesian: `pickle`; MLP/NN and RL: **`joblib`** with a `model_kind` field). **`eval-merged`** and **`recommend-conf`** load via `_meta.yaml` + the registry.
+
+### `bayesian` (default)
+
+Variational Bayesian Ridge–style regression (implementation: `BayesianCostModel`). Use **`--n-iter`** or pass **`n_iter`** in **`--model-options`**.
+
+### `mlp` / `nn`
+
+`sklearn` **`MLPRegressor`**, optionally wrapped with **`StandardScaler`** on **X** and target (`scale_xy=true` by default). Hyperparameters via **`--model-options`** (**`hidden_layer_sizes`**, **`max_iter`**, **`learning_rate_init`**, …).
+
+### `rl`
+
+`RLGaussianPolicyRegressor`: each training row is treated as a **one-step MDP** — normalized features as state, a **Gaussian** action in normalized **y**-space, reward **`-(a - y_scaled)²`**, policy gradient (**REINFORCE**) with a moving-average baseline. **Inference uses the deterministic policy mean** (denormalized to the original label scale), so the CLI pipeline matches Bayesian/MLP. **`return_std`** in code reports **policy sampling scale**, not Bayesian epistemic uncertainty.
+
+Typical **`--model-options`** keys: **`n_epochs`**, **`batch_size`**, **`learning_rate`**, **`policy_std`**, **`random_state`**, **`baseline_momentum`**, **`grad_clip_norm`**, **`scale_xy`**. If **`n_epochs`** is omitted, the top-level **`--n-iter`** value is reused as **`n_epochs`**.
+
+Custom environments (online config search, discrete actions over configs, …) should implement **`MergedTabularRegressor`** and **`register_model_kind`** in `autoconfig.models.merged_registry` rather than relying on this tabular surrogate.
 
 ## CLI: `autoconfig eval-merged`
 
